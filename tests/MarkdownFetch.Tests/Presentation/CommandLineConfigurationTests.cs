@@ -49,10 +49,71 @@ public class CommandLineConfigurationTests
         Assert.Contains("output", arguments);
         Assert.Contains("--output", options);
         Assert.Contains("-o", options);
+        Assert.Contains("--engine", options);
+        Assert.Contains("--use-api", options);
         Assert.Contains("--api-url", options);
         Assert.Contains("-a", options);
         Assert.Contains("--timeout", options);
         Assert.Contains("-t", options);
+    }
+
+    [Fact]
+    public async Task CreateRootCommand_DefaultsToNativeEngine()
+    {
+        MarkdownFetchOptions? capturedOptions = null;
+
+        var rootCommand = CommandLineConfiguration.CreateRootCommand(() =>
+            new InspectingUseCase(opt => capturedOptions = opt));
+
+        var exitCode = await rootCommand.Parse("https://example.com/page").InvokeAsync();
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(capturedOptions);
+        Assert.Equal(ConversionEngine.Native, capturedOptions.Engine);
+    }
+
+    [Fact]
+    public async Task CreateRootCommand_WithUseApiFlag_SetsApiEngine()
+    {
+        MarkdownFetchOptions? capturedOptions = null;
+
+        var rootCommand = CommandLineConfiguration.CreateRootCommand(() =>
+            new InspectingUseCase(opt => capturedOptions = opt));
+
+        var exitCode = await rootCommand.Parse("https://example.com/page --use-api").InvokeAsync();
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(capturedOptions);
+        Assert.Equal(ConversionEngine.Api, capturedOptions.Engine);
+    }
+
+    [Fact]
+    public async Task CreateRootCommand_WithEngineApi_SetsApiEngine()
+    {
+        MarkdownFetchOptions? capturedOptions = null;
+
+        var rootCommand = CommandLineConfiguration.CreateRootCommand(() =>
+            new InspectingUseCase(opt => capturedOptions = opt));
+
+        var exitCode = await rootCommand.Parse("https://example.com/page --engine api").InvokeAsync();
+
+        Assert.Equal(0, exitCode);
+        Assert.NotNull(capturedOptions);
+        Assert.Equal(ConversionEngine.Api, capturedOptions.Engine);
+    }
+
+    [Fact]
+    public async Task CreateRootCommand_WithInvalidEngine_Returns1()
+    {
+        var invoked = false;
+
+        var rootCommand = CommandLineConfiguration.CreateRootCommand(() =>
+            new InspectingUseCase(_ => invoked = true));
+
+        var exitCode = await rootCommand.Parse("https://example.com/page --engine invalid").InvokeAsync();
+
+        Assert.Equal(1, exitCode);
+        Assert.False(invoked);
     }
 
     [Fact]

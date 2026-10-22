@@ -21,17 +21,11 @@ This skill guides AI agents on how to fetch remote web resources and convert the
 
 ## Prerequisites & Verification
 
-`mdfetch` requires a running `markitdown-api` instance (defaulting to `http://127.0.0.1:8490`).
+By default, `mdfetch` performs **pure managed .NET in-process conversion** via `Pmad.Markitdown` (supporting HTML, PDF via PdfSharpCore, DOCX via Mammoth, and Text/Markdown) with **zero external dependencies** (no Docker required).
 
-### 1. Verify Markitdown API Status
+### Optional: Markitdown API (Docker)
 
-Before calling `mdfetch`, verify if the API is reachable or check docker containers:
-
-```bash
-docker ps --filter "name=markitdown-api"
-```
-
-If it is not running, start it using:
+If you explicitly choose to use the external `markitdown-api` (using `--use-api`, `--engine api`, or `--api-url`):
 
 ```bash
 docker run -d --name markitdown-api -p 8490:8490 ghcr.io/dezoito/markitdown-api:latest
@@ -110,7 +104,9 @@ export MARKITDOWN_API_URL="http://127.0.0.1:8490"
 | `<url>` | | The URL of the web resource to fetch (required). | |
 | `[<output file>]` | | Optional destination file path. If omitted, outputs to stdout. | stdout |
 | `--output <path>` | `-o` | Destination file path (overrides positional argument). | stdout |
-| `--api-url <url>` | `-a` | URL of the markitdown API server. | `http://127.0.0.1:8490` |
+| `--engine <native\|api>` | | Conversion engine (`native` or `api`). | `native` |
+| `--use-api` | | Use markitdown-api instead of native .NET (shortcut for `--engine api`). | `false` |
+| `--api-url <url>` | `-a` | URL of the markitdown API server (automatically selects API engine). | `http://127.0.0.1:8490` |
 | `--timeout <sec>` | `-t` | Network and conversion timeout in seconds. | `30` |
 | `--help` | `-h`, `-?` | Display usage and help message. | |
 
@@ -121,7 +117,7 @@ export MARKITDOWN_API_URL="http://127.0.0.1:8490"
 | Exit Code | Cause | Recommended Agent Action |
 |---|---|---|
 | `0` | Success | Proceed with the extracted markdown content. |
-| `1` | API not reachable | Start the Docker container: `docker run -d --name markitdown-api -p 8490:8490 ghcr.io/dezoito/markitdown-api:latest`. |
+| `1` | API not reachable | If running with `--use-api`, start Docker: `docker run -d --name markitdown-api -p 8490:8490 ghcr.io/dezoito/markitdown-api:latest` or omit `--use-api` for native conversion. |
 | `1` | Download error (404/403/timeout) | Verify the remote URL is valid and accessible over the network. |
-| `1` | File type not supported (422) | The file format cannot be parsed by markitdown. Fallback to raw download or curl. |
+| `1` | File type not supported (422) | Try with `--use-api`, or fallback to raw download or curl. |
 | `1` | Invalid CLI arguments | Ensure the URL includes the scheme (e.g. `https://...`). |

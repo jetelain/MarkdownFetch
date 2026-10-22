@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="src/MarkdownFetch/MarkdownFetch.csproj" />
+  <Project Path="src/Pmad.Markitdown/Pmad.Markitdown.csproj" />
   <Project Path="tests/MarkdownFetch.Tests/MarkdownFetch.Tests.csproj" />
+  <Project Path="tests/Pmad.Markitdown.Tests/Pmad.Markitdown.Tests.csproj" />
 </Solution>

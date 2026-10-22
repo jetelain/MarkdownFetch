@@ -24,6 +24,21 @@ public class FetchMarkdownUseCaseTests
         }
     }
 
+    private class FakeNativeMarkdownConverter : INativeMarkdownConverter
+    {
+        public Func<DownloadedResource, CancellationToken, Task<ConversionResult>>? OnConvert { get; set; }
+
+        public Task<ConversionResult> ConvertAsync(DownloadedResource resource, CancellationToken cancellationToken = default)
+        {
+            if (OnConvert != null)
+            {
+                return OnConvert(resource, cancellationToken);
+            }
+
+            return Task.FromResult(ConversionResult.Success("# Test Markdown"));
+        }
+    }
+
     private class FakeMarkitdownClient : IMarkitdownClient
     {
         public bool Ready { get; set; } = true;
@@ -39,7 +54,7 @@ public class FetchMarkdownUseCaseTests
                 return OnConvert(apiUrl, resource, timeout, cancellationToken);
             }
 
-            return Task.FromResult(ConversionResult.Success("# Test Markdown"));
+            return Task.FromResult(ConversionResult.Success("# Test API Markdown"));
         }
     }
 
@@ -71,14 +86,16 @@ public class FetchMarkdownUseCaseTests
     public async Task ExecuteAsync_WhenApiNotReady_Returns1AndPrintsErrorWithDockerHint()
     {
         var downloader = new FakeResourceDownloader();
+        var nativeConverter = new FakeNativeMarkdownConverter();
         var client = new FakeMarkitdownClient { Ready = false };
         var writer = new FakeOutputWriter();
         var console = new FakeConsoleView();
 
-        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
         var options = new MarkdownFetchOptions
         {
             Url = new Uri("https://example.com"),
+            Engine = ConversionEngine.Api,
             ApiUrl = "http://127.0.0.1:8490"
         };
 
@@ -90,17 +107,41 @@ public class FetchMarkdownUseCaseTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_NativeEngine_DoesNotCheckApiReady()
+    {
+        var downloader = new FakeResourceDownloader();
+        var nativeConverter = new FakeNativeMarkdownConverter();
+        var client = new FakeMarkitdownClient { Ready = false }; // API is NOT ready
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://example.com"),
+            Engine = ConversionEngine.Native
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(0, result);
+        Assert.Equal("# Test Markdown", writer.WrittenMarkdown);
+        Assert.Empty(console.Errors);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenDownloadFails_Returns1AndPrintsError()
     {
         var downloader = new FakeResourceDownloader
         {
             OnDownload = (_, _, _) => throw new HttpRequestException("404 Not Found", null, HttpStatusCode.NotFound)
         };
+        var nativeConverter = new FakeNativeMarkdownConverter();
         var client = new FakeMarkitdownClient();
         var writer = new FakeOutputWriter();
         var console = new FakeConsoleView();
 
-        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
         var options = new MarkdownFetchOptions
         {
             Url = new Uri("https://example.com/missing")
@@ -114,9 +155,35 @@ public class FetchMarkdownUseCaseTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenFileTypeNotSupported_Returns1AndPrintsUnsupportedMessage()
+    public async Task ExecuteAsync_WhenNativeFileTypeNotSupported_Returns1AndPrintsUnsupportedMessage()
     {
         var downloader = new FakeResourceDownloader();
+        var nativeConverter = new FakeNativeMarkdownConverter
+        {
+            OnConvert = (_, _) => Task.FromResult(ConversionResult.Failure("Unsupported", 422))
+        };
+        var client = new FakeMarkitdownClient();
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://example.com/unsupported.bin"),
+            Engine = ConversionEngine.Native
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(1, result);
+        Assert.Contains(console.Errors, e => e.Contains("File type is not supported. Try using --use-api or curl instead."));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenApiFileTypeNotSupported_Returns1AndPrintsUnsupportedMessage()
+    {
+        var downloader = new FakeResourceDownloader();
+        var nativeConverter = new FakeNativeMarkdownConverter();
         var client = new FakeMarkitdownClient
         {
             OnConvert = (_, _, _, _) => Task.FromResult(ConversionResult.Failure("Unsupported", 422))
@@ -124,10 +191,11 @@ public class FetchMarkdownUseCaseTests
         var writer = new FakeOutputWriter();
         var console = new FakeConsoleView();
 
-        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
         var options = new MarkdownFetchOptions
         {
-            Url = new Uri("https://example.com/unsupported.bin")
+            Url = new Uri("https://example.com/unsupported.bin"),
+            Engine = ConversionEngine.Api
         };
 
         var result = await useCase.ExecuteAsync(options);
@@ -140,14 +208,15 @@ public class FetchMarkdownUseCaseTests
     public async Task ExecuteAsync_WhenConversionFails_Returns1AndPrintsErrorMessage()
     {
         var downloader = new FakeResourceDownloader();
-        var client = new FakeMarkitdownClient
+        var nativeConverter = new FakeNativeMarkdownConverter
         {
-            OnConvert = (_, _, _, _) => Task.FromResult(ConversionResult.Failure("Internal conversion failure", 500))
+            OnConvert = (_, _) => Task.FromResult(ConversionResult.Failure("Internal conversion failure", 500))
         };
+        var client = new FakeMarkitdownClient();
         var writer = new FakeOutputWriter();
         var console = new FakeConsoleView();
 
-        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
         var options = new MarkdownFetchOptions
         {
             Url = new Uri("https://example.com/file")
@@ -163,11 +232,12 @@ public class FetchMarkdownUseCaseTests
     public async Task ExecuteAsync_WhenSuccessWithoutOutputPath_WritesToStdoutAndReturns0()
     {
         var downloader = new FakeResourceDownloader();
+        var nativeConverter = new FakeNativeMarkdownConverter();
         var client = new FakeMarkitdownClient();
         var writer = new FakeOutputWriter();
         var console = new FakeConsoleView();
 
-        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
         var options = new MarkdownFetchOptions
         {
             Url = new Uri("https://example.com")
@@ -186,11 +256,12 @@ public class FetchMarkdownUseCaseTests
     public async Task ExecuteAsync_WhenSuccessWithOutputPath_WritesToFileAndPrintsSuccess()
     {
         var downloader = new FakeResourceDownloader();
+        var nativeConverter = new FakeNativeMarkdownConverter();
         var client = new FakeMarkitdownClient();
         var writer = new FakeOutputWriter();
         var console = new FakeConsoleView();
 
-        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
         var options = new MarkdownFetchOptions
         {
             Url = new Uri("https://example.com"),

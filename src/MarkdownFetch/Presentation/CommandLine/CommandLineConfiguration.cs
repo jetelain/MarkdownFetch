@@ -38,8 +38,21 @@ public static class CommandLineConfiguration
             "--api-url",
             "-a")
         {
-            Description = "The markitdown API server URL.",
+            Description = "The markitdown API server URL (automatically selects the API engine).",
             DefaultValueFactory = _ => defaultApiUrl
+        };
+
+        var engineOption = new Option<string>(
+            "--engine")
+        {
+            Description = "Conversion engine to use: 'native' (default, pure .NET managed) or 'api' (markitdown-api).",
+            DefaultValueFactory = _ => "native"
+        };
+
+        var useApiOption = new Option<bool>(
+            "--use-api")
+        {
+            Description = "Use external markitdown-api instead of native .NET conversion (shortcut for --engine api)."
         };
 
         var timeoutOption = new Option<int>(
@@ -50,11 +63,13 @@ public static class CommandLineConfiguration
             DefaultValueFactory = _ => 30
         };
 
-        var rootCommand = new RootCommand("Small CLI to download any web resource as a markdown (with markitdown-api).")
+        var rootCommand = new RootCommand("Small CLI to download any web resource as a markdown (with native .NET or markitdown-api).")
         {
             urlArgument,
             outputArgument,
             outputOption,
+            engineOption,
+            useApiOption,
             apiUrlOption,
             timeoutOption
         };
@@ -72,6 +87,21 @@ public static class CommandLineConfiguration
             var optionOutput = parseResult.GetValue(outputOption);
             var outputPath = !string.IsNullOrEmpty(optionOutput) ? optionOutput : positionalOutput;
 
+            var engineRaw = parseResult.GetValue(engineOption)?.Trim().ToLowerInvariant() ?? "native";
+            if (engineRaw != "native" && engineRaw != "api")
+            {
+                Console.Error.WriteLine($"[ERROR] Invalid engine '{engineRaw}'. Must be 'native' or 'api'.");
+                return 1;
+            }
+
+            var useApi = parseResult.GetValue(useApiOption);
+            var apiUrlResult = parseResult.GetResult(apiUrlOption);
+            var apiUrlExplicitlyProvided = apiUrlResult is { Implicit: false };
+
+            var engine = (engineRaw == "api" || useApi || apiUrlExplicitlyProvided)
+                ? ConversionEngine.Api
+                : ConversionEngine.Native;
+
             var apiUrl = parseResult.GetValue(apiUrlOption) ?? defaultApiUrl;
             var timeoutSeconds = parseResult.GetValue(timeoutOption);
             if (timeoutSeconds <= 0)
@@ -83,6 +113,7 @@ public static class CommandLineConfiguration
             {
                 Url = uri,
                 OutputPath = outputPath,
+                Engine = engine,
                 ApiUrl = apiUrl,
                 Timeout = TimeSpan.FromSeconds(timeoutSeconds)
             };

@@ -10,20 +10,38 @@ namespace MarkdownFetch.Core.UseCases;
 public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
 {
     private readonly IResourceDownloader _downloader;
+    private readonly INativeMarkdownConverter _nativeConverter;
     private readonly IMarkitdownClient _markitdownClient;
     private readonly IOutputWriter _outputWriter;
     private readonly IConsoleView _consoleView;
 
     public FetchMarkdownUseCase(
         IResourceDownloader downloader,
+        INativeMarkdownConverter nativeConverter,
         IMarkitdownClient markitdownClient,
         IOutputWriter outputWriter,
         IConsoleView consoleView)
     {
         _downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
+        _nativeConverter = nativeConverter ?? throw new ArgumentNullException(nameof(nativeConverter));
         _markitdownClient = markitdownClient ?? throw new ArgumentNullException(nameof(markitdownClient));
         _outputWriter = outputWriter ?? throw new ArgumentNullException(nameof(outputWriter));
         _consoleView = consoleView ?? throw new ArgumentNullException(nameof(consoleView));
+    }
+
+    public FetchMarkdownUseCase(
+        IResourceDownloader downloader,
+        IMarkitdownClient markitdownClient,
+        IOutputWriter outputWriter,
+        IConsoleView consoleView)
+        : this(downloader, new NullNativeMarkdownConverter(), markitdownClient, outputWriter, consoleView)
+    {
+    }
+
+    private sealed class NullNativeMarkdownConverter : INativeMarkdownConverter
+    {
+        public Task<ConversionResult> ConvertAsync(DownloadedResource resource, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ConversionResult.Failure("Native converter not configured.", 500));
     }
 
     public async Task<int> ExecuteAsync(MarkdownFetchOptions options, CancellationToken cancellationToken = default)
@@ -32,12 +50,15 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
 
         var apiUrl = (options.ApiUrl ?? string.Empty).TrimEnd('/');
 
-        if (!await _markitdownClient.IsReadyAsync(apiUrl, cancellationToken))
+        if (options.Engine == ConversionEngine.Api)
         {
-            var port = ResolvePort(apiUrl);
-            _consoleView.WriteError($"Markitdown API is not reachable at '{apiUrl}'");
-            _consoleView.WriteError($"Run 'docker run -d --name markitdown-api -p {port}:8490 ghcr.io/dezoito/markitdown-api:latest'");
-            return 1;
+            if (!await _markitdownClient.IsReadyAsync(apiUrl, cancellationToken))
+            {
+                var port = ResolvePort(apiUrl);
+                _consoleView.WriteError($"Markitdown API is not reachable at '{apiUrl}'");
+                _consoleView.WriteError($"Run 'docker run -d --name markitdown-api -p {port}:8490 ghcr.io/dezoito/markitdown-api:latest'");
+                return 1;
+            }
         }
 
         DownloadedResource resource;
@@ -68,7 +89,14 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
             ConversionResult conversionResult;
             try
             {
-                conversionResult = await _markitdownClient.ConvertAsync(apiUrl, resource, options.Timeout, cancellationToken);
+                if (options.Engine == ConversionEngine.Api)
+                {
+                    conversionResult = await _markitdownClient.ConvertAsync(apiUrl, resource, options.Timeout, cancellationToken);
+                }
+                else
+                {
+                    conversionResult = await _nativeConverter.ConvertAsync(resource, cancellationToken);
+                }
             }
             catch (Exception ex)
             {
@@ -80,7 +108,9 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
             {
                 if (conversionResult.StatusCode == 422)
                 {
-                    _consoleView.WriteError("File type is not supported. Try curl instead.");
+                    _consoleView.WriteError(options.Engine == ConversionEngine.Native
+                        ? "File type is not supported. Try using --use-api or curl instead."
+                        : "File type is not supported. Try curl instead.");
                 }
                 else if (!string.IsNullOrWhiteSpace(conversionResult.ErrorMessage))
                 {
