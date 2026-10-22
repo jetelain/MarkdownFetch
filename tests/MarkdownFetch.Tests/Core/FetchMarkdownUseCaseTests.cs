@@ -1,0 +1,208 @@
+using System.Net;
+using System.Text;
+using MarkdownFetch.Core.Models;
+using MarkdownFetch.Core.Ports;
+using MarkdownFetch.Core.UseCases;
+
+namespace MarkdownFetch.Tests.Core;
+
+public class FetchMarkdownUseCaseTests
+{
+    private class FakeResourceDownloader : IResourceDownloader
+    {
+        public Func<Uri, TimeSpan, CancellationToken, Task<DownloadedResource>>? OnDownload { get; set; }
+
+        public Task<DownloadedResource> DownloadAsync(Uri url, TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            if (OnDownload != null)
+            {
+                return OnDownload(url, timeout, cancellationToken);
+            }
+
+            var stream = new MemoryStream(Encoding.UTF8.GetBytes("<html>test</html>"));
+            return Task.FromResult(new DownloadedResource(stream, "test.html", "text/html"));
+        }
+    }
+
+    private class FakeMarkitdownClient : IMarkitdownClient
+    {
+        public bool Ready { get; set; } = true;
+        public Func<string, DownloadedResource, TimeSpan, CancellationToken, Task<ConversionResult>>? OnConvert { get; set; }
+
+        public Task<bool> IsReadyAsync(string apiUrl, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Ready);
+
+        public Task<ConversionResult> ConvertAsync(string apiUrl, DownloadedResource resource, TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            if (OnConvert != null)
+            {
+                return OnConvert(apiUrl, resource, timeout, cancellationToken);
+            }
+
+            return Task.FromResult(ConversionResult.Success("# Test Markdown"));
+        }
+    }
+
+    private class FakeOutputWriter : IOutputWriter
+    {
+        public string? WrittenMarkdown { get; private set; }
+        public string? TargetOutputPath { get; private set; }
+
+        public Task WriteAsync(string markdown, string? outputPath, CancellationToken cancellationToken = default)
+        {
+            WrittenMarkdown = markdown;
+            TargetOutputPath = outputPath;
+            return Task.CompletedTask;
+        }
+    }
+
+    private class FakeConsoleView : IConsoleView
+    {
+        public List<string> Messages { get; } = new();
+        public List<string> Successes { get; } = new();
+        public List<string> Errors { get; } = new();
+
+        public void WriteMessage(string message) => Messages.Add(message);
+        public void WriteSuccess(string message) => Successes.Add(message);
+        public void WriteError(string message) => Errors.Add(message);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenApiNotReady_Returns1AndPrintsErrorWithDockerHint()
+    {
+        var downloader = new FakeResourceDownloader();
+        var client = new FakeMarkitdownClient { Ready = false };
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://example.com"),
+            ApiUrl = "http://127.0.0.1:8490"
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(1, result);
+        Assert.Contains(console.Errors, e => e.Contains("Markitdown API is not reachable"));
+        Assert.Contains(console.Errors, e => e.Contains("docker run"));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenDownloadFails_Returns1AndPrintsError()
+    {
+        var downloader = new FakeResourceDownloader
+        {
+            OnDownload = (_, _, _) => throw new HttpRequestException("404 Not Found", null, HttpStatusCode.NotFound)
+        };
+        var client = new FakeMarkitdownClient();
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://example.com/missing")
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(1, result);
+        Assert.Contains(console.Errors, e => e.Contains("Unable to download"));
+        Assert.Contains(console.Errors, e => e.Contains("404"));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenFileTypeNotSupported_Returns1AndPrintsUnsupportedMessage()
+    {
+        var downloader = new FakeResourceDownloader();
+        var client = new FakeMarkitdownClient
+        {
+            OnConvert = (_, _, _, _) => Task.FromResult(ConversionResult.Failure("Unsupported", 422))
+        };
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://example.com/unsupported.bin")
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(1, result);
+        Assert.Contains(console.Errors, e => e.Contains("File type is not supported. Try curl instead."));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenConversionFails_Returns1AndPrintsErrorMessage()
+    {
+        var downloader = new FakeResourceDownloader();
+        var client = new FakeMarkitdownClient
+        {
+            OnConvert = (_, _, _, _) => Task.FromResult(ConversionResult.Failure("Internal conversion failure", 500))
+        };
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://example.com/file")
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(1, result);
+        Assert.Contains(console.Errors, e => e.Contains("Internal conversion failure"));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSuccessWithoutOutputPath_WritesToStdoutAndReturns0()
+    {
+        var downloader = new FakeResourceDownloader();
+        var client = new FakeMarkitdownClient();
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://example.com")
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(0, result);
+        Assert.Equal("# Test Markdown", writer.WrittenMarkdown);
+        Assert.Null(writer.TargetOutputPath);
+        Assert.Empty(console.Successes);
+        Assert.Empty(console.Errors);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenSuccessWithOutputPath_WritesToFileAndPrintsSuccess()
+    {
+        var downloader = new FakeResourceDownloader();
+        var client = new FakeMarkitdownClient();
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://example.com"),
+            OutputPath = "docs/output.md"
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(0, result);
+        Assert.Equal("# Test Markdown", writer.WrittenMarkdown);
+        Assert.Equal("docs/output.md", writer.TargetOutputPath);
+        Assert.Contains(console.Successes, s => s.Contains("Saved to: docs/output.md"));
+        Assert.Empty(console.Errors);
+    }
+}

@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "MarkdownFetch": {
+      "commandName": "Project",
+      "commandLineArgs": " https://maps.plan-ops.fr/"
+    }
+  }
+}
