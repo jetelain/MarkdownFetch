@@ -35,10 +35,11 @@ public sealed class HttpResourceDownloader : IResourceDownloader
         var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token);
         response.EnsureSuccessStatusCode();
 
-        var fileName = FileNameResolver.ResolveFileName(response.Content.Headers, url);
+        var finalUrl = response.RequestMessage?.RequestUri ?? url;
+        var fileName = FileNameResolver.ResolveFileName(response.Content.Headers, finalUrl);
         var contentType = response.Content.Headers.ContentType?.ToString();
         var contentStream = await response.Content.ReadAsStreamAsync(cts.Token);
 
-        return new DownloadedResource(contentStream, fileName, contentType);
+        return new DownloadedResource(contentStream, fileName, contentType, finalUrl);
     }
 }

@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
 using ReverseMarkdown;
 
@@ -59,13 +61,13 @@ public sealed class HtmlToMarkdownConverter : IFormatConverter
 
         string? title = null;
 
-        if (options.CleanHtml)
+        if (options.CleanHtml || options.BaseUrl != null)
         {
             try
             {
                 var document = _htmlParser.ParseDocument(rawHtml);
 
-                if (options.IncludeTitle && !string.IsNullOrWhiteSpace(document.Title))
+                if (options.CleanHtml && options.IncludeTitle && !string.IsNullOrWhiteSpace(document.Title))
                 {
                     var hasH1 = document.QuerySelector("h1") != null;
                     if (!hasH1)
@@ -74,12 +76,17 @@ public sealed class HtmlToMarkdownConverter : IFormatConverter
                     }
                 }
 
-                // Strip non-content / styling / script tags
-                var unwanted = document.QuerySelectorAll("script, style, noscript, svg, nav, footer, aside");
-                foreach (var el in unwanted)
+                if (options.CleanHtml)
                 {
-                    el.Remove();
+                    // Strip non-content / styling / script tags
+                    var unwanted = document.QuerySelectorAll("script, style, noscript, svg, nav, footer, aside");
+                    foreach (var el in unwanted)
+                    {
+                        el.Remove();
+                    }
                 }
+
+                ResolveRelativeUrls(document, options.BaseUrl);
 
                 if (document.Body != null)
                 {
@@ -101,6 +108,100 @@ public sealed class HtmlToMarkdownConverter : IFormatConverter
         }
 
         return cleaned;
+    }
+
+    private static void ResolveRelativeUrls(IHtmlDocument document, Uri? baseUrl)
+    {
+        var effectiveBaseUrl = baseUrl;
+
+        var baseElement = document.QuerySelector("base[href]");
+        if (baseElement != null)
+        {
+            var baseHref = baseElement.GetAttribute("href");
+            if (!string.IsNullOrWhiteSpace(baseHref))
+            {
+                if (effectiveBaseUrl != null)
+                {
+                    if (Uri.TryCreate(effectiveBaseUrl, baseHref, out var resolvedBase))
+                    {
+                        effectiveBaseUrl = resolvedBase;
+                    }
+                }
+                else if (Uri.TryCreate(baseHref, UriKind.Absolute, out var resolvedBase))
+                {
+                    effectiveBaseUrl = resolvedBase;
+                }
+            }
+        }
+
+        if (effectiveBaseUrl == null)
+        {
+            return;
+        }
+
+        var linkElements = document.QuerySelectorAll("a[href], area[href]");
+        foreach (var el in linkElements)
+        {
+            var href = el.GetAttribute("href");
+            if (TryResolveUrl(effectiveBaseUrl, href, out var absoluteUrl))
+            {
+                el.SetAttribute("href", absoluteUrl);
+            }
+        }
+
+        var srcElements = document.QuerySelectorAll("img[src], audio[src], video[src], source[src]");
+        foreach (var el in srcElements)
+        {
+            var src = el.GetAttribute("src");
+            if (TryResolveUrl(effectiveBaseUrl, src, out var absoluteUrl))
+            {
+                el.SetAttribute("src", absoluteUrl);
+            }
+        }
+    }
+
+    public static bool TryResolveUrl(Uri baseUrl, string? relativeUrl, [NotNullWhen(true)] out string? resolvedUrl)
+    {
+        resolvedUrl = null;
+
+        if (string.IsNullOrWhiteSpace(relativeUrl))
+        {
+            return false;
+        }
+
+        var trimmed = relativeUrl.Trim();
+
+        // Preserve in-page anchor fragments (e.g. #section-heading)
+        if (trimmed.StartsWith('#'))
+        {
+            return false;
+        }
+
+        // Ignore common non-HTTP URI schemes
+        if (trimmed.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("tel:", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var existingUri))
+        {
+            if (existingUri.Scheme == Uri.UriSchemeHttp || existingUri.Scheme == Uri.UriSchemeHttps)
+            {
+                // Already an absolute HTTP/HTTPS URL
+                return false;
+            }
+        }
+
+        if (!Uri.TryCreate(baseUrl, trimmed, out var resolvedUri))
+        {
+            return false;
+        }
+
+        resolvedUrl = resolvedUri.AbsoluteUri;
+        return true;
     }
 
     private static string CleanMarkdown(string markdown)

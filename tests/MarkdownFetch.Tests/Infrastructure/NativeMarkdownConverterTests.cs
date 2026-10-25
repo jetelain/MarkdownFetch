@@ -24,6 +24,21 @@ public class NativeMarkdownConverterTests
     }
 
     [Fact]
+    public async Task ConvertAsync_HtmlContentWithUrl_ResolvesRelativeLinksToAbsolute()
+    {
+        var html = "<p><a href=\"/docs/intro\">Documentation</a></p><p><img src=\"/img/logo.png\" alt=\"Logo\" /></p>";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(html));
+        var resource = new DownloadedResource(stream, "page.html", "text/html", new Uri("https://example.com/site/"));
+
+        var result = await _converter.ConvertAsync(resource);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Markdown);
+        Assert.Contains("[Documentation](https://example.com/docs/intro)", result.Markdown);
+        Assert.Contains("![Logo](https://example.com/img/logo.png)", result.Markdown);
+    }
+
+    [Fact]
     public async Task ConvertAsync_JsonContent_ConvertsToMarkdown()
     {
         var json = "{\"name\": \"Alice\", \"age\": 30}";

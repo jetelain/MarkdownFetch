@@ -1,5 +1,6 @@
 using MarkdownFetch.Core.Models;
 using MarkdownFetch.Core.Ports;
+using MarkdownFetch.Core.Services;
 
 namespace MarkdownFetch.Core.UseCases;
 
@@ -120,6 +121,12 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
             }
 
             var markdown = conversionResult.Markdown ?? string.Empty;
+            var effectiveUrl = resource.Url ?? options.Url;
+            if (effectiveUrl != null && !string.IsNullOrEmpty(markdown))
+            {
+                markdown = MarkdownLinkResolver.ResolveRelativeLinks(markdown, effectiveUrl);
+            }
+
             try
             {
                 await _outputWriter.WriteAsync(markdown, options.OutputPath, cancellationToken);

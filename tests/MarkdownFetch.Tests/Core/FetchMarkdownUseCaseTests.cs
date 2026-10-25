@@ -276,4 +276,70 @@ public class FetchMarkdownUseCaseTests
         Assert.Contains(console.Successes, s => s.Contains("Saved to: docs/output.md"));
         Assert.Empty(console.Errors);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenMarkdownContainsRelativeLinks_ResolvesToAbsoluteLinks()
+    {
+        var downloader = new FakeResourceDownloader
+        {
+            OnDownload = (url, _, _) =>
+            {
+                var stream = new MemoryStream(Encoding.UTF8.GetBytes("<html></html>"));
+                return Task.FromResult(new DownloadedResource(stream, "index.html", "text/html", url));
+            }
+        };
+        var nativeConverter = new FakeNativeMarkdownConverter
+        {
+            OnConvert = (res, _) => Task.FromResult(ConversionResult.Success("[Get started](/signup)\n![Logo](/logo.png)"))
+        };
+        var client = new FakeMarkitdownClient();
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://ollama.com/")
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(0, result);
+        Assert.Contains("[Get started](https://ollama.com/signup)", writer.WrittenMarkdown);
+        Assert.Contains("![Logo](https://ollama.com/logo.png)", writer.WrittenMarkdown);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ApiEngine_ResolvesRelativeLinksToAbsoluteLinks()
+    {
+        var downloader = new FakeResourceDownloader
+        {
+            OnDownload = (url, _, _) =>
+            {
+                var stream = new MemoryStream(Encoding.UTF8.GetBytes("<html></html>"));
+                return Task.FromResult(new DownloadedResource(stream, "index.html", "text/html", url));
+            }
+        };
+        var nativeConverter = new FakeNativeMarkdownConverter();
+        var client = new FakeMarkitdownClient
+        {
+            OnConvert = (_, _, _, _) => Task.FromResult(ConversionResult.Success("# Title\n\n[Docs](/docs)\n![Img](/img.svg)"))
+        };
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://example.com/site/"),
+            Engine = ConversionEngine.Api
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(0, result);
+        Assert.Contains("[Docs](https://example.com/docs)", writer.WrittenMarkdown);
+        Assert.Contains("![Img](https://example.com/img.svg)", writer.WrittenMarkdown);
+    }
 }
+

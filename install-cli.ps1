@@ -64,20 +64,31 @@ if (Test-Path $userCacheDir) {
 # 3. Install or Update Global Tool
 Write-Host "`n[3/3] Installing or updating global dotnet tool '$toolCommand'..." -ForegroundColor Gray
 
-if ($Force) {
-    Write-Host "[Force] Uninstalling existing global tool if present..." -ForegroundColor Yellow
-    dotnet tool uninstall -g $packageName 2>$null | Out-Null
+$installArgs = @("--add-source", $packageOutputDir, "--no-cache")
+$nupkgFile = Get-ChildItem "$packageOutputDir\$packageName.*.nupkg" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($nupkgFile -and $nupkgFile.Name -match "^$packageName\.(.+)\.nupkg$") {
+    $packageVersion = $Matches[1]
+    Write-Host "Target package version: $packageVersion" -ForegroundColor Gray
+    $installArgs += @("--version", $packageVersion)
+} else {
+    $installArgs += @("--prerelease")
 }
 
 $installedTools = dotnet tool list -g
 $isInstalled = $installedTools -match "(?i)\b$packageName\b"
 
-if ($isInstalled -and -not $Force) {
+if ($Force -and $isInstalled) {
+    Write-Host "[Force] Uninstalling existing global tool if present..." -ForegroundColor Yellow
+    & dotnet tool uninstall -g $packageName | Out-Null
+    $isInstalled = $false
+}
+
+if ($isInstalled) {
     Write-Host "Updating global tool '$toolCommand'..." -ForegroundColor Cyan
-    dotnet tool update -g $packageName --add-source $packageOutputDir --no-cache --prerelease
+    & dotnet tool update -g $packageName @installArgs
 } else {
     Write-Host "Installing global tool '$toolCommand'..." -ForegroundColor Cyan
-    dotnet tool install -g $packageName --add-source $packageOutputDir --no-cache --prerelease
+    & dotnet tool install -g $packageName @installArgs
 }
 
 if ($LASTEXITCODE -ne 0) {

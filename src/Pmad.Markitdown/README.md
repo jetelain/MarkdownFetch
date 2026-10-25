@@ -95,7 +95,10 @@ var options = new MarkitdownOptions
     IncludeTitle = true,
 
     // Strip scripts, styles, navigation, and footer tags from HTML (default: true)
-    CleanHtml = true
+    CleanHtml = true,
+
+    // Resolve relative links and images into absolute URLs (default: null)
+    BaseUrl = new Uri("https://example.com/")
 };
 
 string markdown = await markitdown.ConvertFileAsync("article.html", options);

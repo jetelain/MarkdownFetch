@@ -29,7 +29,11 @@ public sealed class NativeMarkdownConverter : INativeMarkdownConverter
 
         try
         {
-            var markdown = await _markitdown.ConvertAsync(resource.Content, extension, cancellationToken: cancellationToken);
+            var options = new MarkitdownOptions
+            {
+                BaseUrl = resource.Url
+            };
+            var markdown = await _markitdown.ConvertAsync(resource.Content, extension, options, cancellationToken: cancellationToken);
             return ConversionResult.Success(markdown);
         }
         catch (NotSupportedException)

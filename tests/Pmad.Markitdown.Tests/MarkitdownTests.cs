@@ -109,4 +109,85 @@ public class MarkitdownTests
         await Assert.ThrowsAsync<NotSupportedException>(() =>
             _markitdown.ConvertAsync(stream, ".unknown_xyz"));
     }
+
+    [Fact]
+    public async Task ConvertTextAsync_WithBaseUrl_ResolvesRelativeLinksAndImagesToAbsolute()
+    {
+        var html = """
+        <html>
+        <head><title>Ollama</title></head>
+        <body>
+            <p><a href="/signup">Get started</a></p>
+            <p><a href="models">Models</a></p>
+            <p><a href="../about">About</a></p>
+            <p><a href="https://github.com/ollama">External GitHub</a></p>
+            <p><img src="/public/logos/apple.svg" alt="Apple" /></p>
+            <p><img src="images/nvidia.svg" alt="NVIDIA" /></p>
+        </body>
+        </html>
+        """;
+
+        var options = new MarkitdownOptions
+        {
+            BaseUrl = new Uri("https://ollama.com/library/")
+        };
+
+        var markdown = await _markitdown.ConvertTextAsync(html, "text/html", options);
+
+        Assert.NotNull(markdown);
+        Assert.Contains("[Get started](https://ollama.com/signup)", markdown);
+        Assert.Contains("[Models](https://ollama.com/library/models)", markdown);
+        Assert.Contains("[About](https://ollama.com/about)", markdown);
+        Assert.Contains("[External GitHub](https://github.com/ollama)", markdown);
+        Assert.Contains("![Apple](https://ollama.com/public/logos/apple.svg)", markdown);
+        Assert.Contains("![NVIDIA](https://ollama.com/library/images/nvidia.svg)", markdown);
+    }
+
+    [Fact]
+    public async Task ConvertTextAsync_WithBaseHrefTag_ResolvesRelativeToBaseTag()
+    {
+        var html = """
+        <html>
+        <head>
+            <title>Base Tag Page</title>
+            <base href="https://cdn.example.com/assets/" />
+        </head>
+        <body>
+            <p><a href="docs/guide.html">Guide</a></p>
+            <p><img src="logo.png" alt="Logo" /></p>
+        </body>
+        </html>
+        """;
+
+        var markdown = await _markitdown.ConvertTextAsync(html, "text/html");
+
+        Assert.NotNull(markdown);
+        Assert.Contains("[Guide](https://cdn.example.com/assets/docs/guide.html)", markdown);
+        Assert.Contains("![Logo](https://cdn.example.com/assets/logo.png)", markdown);
+    }
+
+    [Fact]
+    public async Task ConvertTextAsync_WithBaseUrl_PreservesAnchorFragmentsAndNonHttpSchemes()
+    {
+        var html = """
+        <html>
+        <body>
+            <p><a href="#heading-1">Internal Section</a></p>
+            <p><a href="mailto:support@example.com">Contact Us</a></p>
+            <p><a href="javascript:void(0)">Do Nothing</a></p>
+            <p><a href="/page#details">Page with Fragment</a></p>
+        </body>
+        </html>
+        """;
+
+        var options = new MarkitdownOptions(new Uri("https://example.com/app/"));
+
+        var markdown = await _markitdown.ConvertTextAsync(html, "text/html", options);
+
+        Assert.NotNull(markdown);
+        Assert.Contains("[Internal Section](#heading-1)", markdown);
+        Assert.Contains("[Contact Us](mailto:support@example.com)", markdown);
+        Assert.Contains("[Page with Fragment](https://example.com/page#details)", markdown);
+    }
 }
+
