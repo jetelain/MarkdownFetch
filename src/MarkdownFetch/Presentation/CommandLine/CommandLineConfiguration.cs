@@ -98,20 +98,6 @@ public static class CommandLineConfiguration
             Description = "Disable prompt injection detection in fetched content."
         };
 
-        var urlWhitelistOption = new Option<string[]>(
-            "--url-whitelist")
-        {
-            Description = "Permitted URL pattern(s) or domain(s). Can be specified multiple times.",
-            Arity = ArgumentArity.ZeroOrMore,
-            AllowMultipleArgumentsPerToken = true
-        };
-
-        var safetyConfigOption = new Option<string?>(
-            "--safety-config")
-        {
-            Description = "Path to a safety configuration file."
-        };
-
         var rootCommand = new RootCommand("Small CLI to download any web resource as a markdown (with native .NET or markitdown-api).")
         {
             urlArgument,
@@ -124,9 +110,7 @@ public static class CommandLineConfiguration
             filterHiddenTextOption,
             noFilterHiddenTextOption,
             detectPromptInjectionOption,
-            noDetectPromptInjectionOption,
-            urlWhitelistOption,
-            safetyConfigOption
+            noDetectPromptInjectionOption
         };
 
         rootCommand.SetAction(async (parseResult, cancellationToken) =>
@@ -164,13 +148,12 @@ public static class CommandLineConfiguration
                 timeoutSeconds = 30;
             }
 
-            // Load safety configuration from system/container paths and/or explicit path
+            // Load safety configuration from system/container paths or environment variable
             var loader = safetyLoader ?? SafetyConfigurationLoader.Instance;
-            var explicitConfigPath = parseResult.GetValue(safetyConfigOption);
             SafetyPolicy safetyPolicy;
             try
             {
-                safetyPolicy = loader.LoadPolicy(explicitConfigPath);
+                safetyPolicy = loader.LoadPolicy();
             }
             catch (Exception ex)
             {
@@ -236,27 +219,6 @@ public static class CommandLineConfiguration
                 }
             }
 
-            // Resolve URL Whitelist
-            var cliWhitelistEntries = new List<string>();
-            var cliWhitelist = parseResult.GetValue(urlWhitelistOption);
-            if (cliWhitelist != null && cliWhitelist.Length > 0)
-            {
-                foreach (var item in cliWhitelist)
-                {
-                    if (!string.IsNullOrWhiteSpace(item))
-                    {
-                        var parts = item.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                        foreach (var part in parts)
-                        {
-                            if (!string.IsNullOrWhiteSpace(part))
-                            {
-                                cliWhitelistEntries.Add(part);
-                            }
-                        }
-                    }
-                }
-            }
-
             var options = new MarkdownFetchOptions
             {
                 Url = uri,
@@ -266,10 +228,8 @@ public static class CommandLineConfiguration
                 Timeout = TimeSpan.FromSeconds(timeoutSeconds),
                 FilterHiddenText = filterHiddenText,
                 DetectPromptInjection = detectPromptInjection,
-                UrlWhitelist = cliWhitelistEntries.Count > 0 ? cliWhitelistEntries : safetyPolicy.UrlWhitelist,
-                SystemUrlWhitelist = safetyPolicy.SystemUrlWhitelist.Count > 0 ? safetyPolicy.SystemUrlWhitelist : safetyPolicy.UrlWhitelist,
-                PromptInjectionAction = safetyPolicy.PromptInjectionAction,
-                SafetyConfigPath = explicitConfigPath ?? safetyPolicy.LoadedFromPath
+                UrlWhitelist = safetyPolicy.UrlWhitelist,
+                PromptInjectionAction = safetyPolicy.PromptInjectionAction
             };
 
             var useCase = useCaseFactory();

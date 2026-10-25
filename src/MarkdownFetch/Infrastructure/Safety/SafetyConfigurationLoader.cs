@@ -26,32 +26,29 @@ public sealed class SafetyConfigurationLoader : ISafetyConfigurationLoader
         _readFile = readFile ?? File.ReadAllText;
     }
 
-    public SafetyPolicy LoadPolicy(string? explicitConfigPath = null)
+    public SafetyPolicy LoadPolicy(string? customPath = null)
     {
-        SafetyConfiguration? systemConfig = null;
-        string? systemConfigPath = null;
+        string? configPath = customPath;
 
-        var systemPath = FindSystemConfigPath();
-        if (systemPath != null)
+        if (string.IsNullOrWhiteSpace(configPath))
         {
-            systemConfig = ParseFile(systemPath);
-            systemConfigPath = systemPath;
+            configPath = FindConfigPath();
+        }
+        else if (!_fileExists(configPath))
+        {
+            throw new FileNotFoundException($"Safety configuration file not found: '{configPath}'", configPath);
         }
 
-        SafetyConfiguration? explicitConfig = null;
-        if (!string.IsNullOrWhiteSpace(explicitConfigPath))
+        if (configPath == null)
         {
-            if (!_fileExists(explicitConfigPath))
-            {
-                throw new FileNotFoundException($"Safety configuration file not found: '{explicitConfigPath}'", explicitConfigPath);
-            }
-            explicitConfig = ParseFile(explicitConfigPath);
+            return new SafetyPolicy();
         }
 
-        return MergePolicies(systemConfig, explicitConfig, systemConfigPath ?? explicitConfigPath);
+        var config = ParseFile(configPath);
+        return CreatePolicy(config, configPath);
     }
 
-    private string? FindSystemConfigPath()
+    private string? FindConfigPath()
     {
         if (_customSearchPaths != null)
         {
@@ -148,46 +145,29 @@ public sealed class SafetyConfigurationLoader : ISafetyConfigurationLoader
         }
     }
 
-    private static SafetyPolicy MergePolicies(SafetyConfiguration? system, SafetyConfiguration? explicitConfig, string? loadedPath)
+    private static SafetyPolicy CreatePolicy(SafetyConfiguration config, string? loadedPath)
     {
-        var systemWhitelist = new List<string>();
-        var systemList = system?.UrlWhitelist ?? system?.AllowedUrls;
-        if (systemList != null)
+        var whitelist = new List<string>();
+        var list = config.UrlWhitelist ?? config.AllowedUrls;
+        if (list != null)
         {
-            systemWhitelist.AddRange(systemList.Where(s => !string.IsNullOrWhiteSpace(s)));
+            whitelist.AddRange(list.Where(s => !string.IsNullOrWhiteSpace(s)));
         }
 
-        var explicitWhitelist = new List<string>();
-        var explicitList = explicitConfig?.UrlWhitelist ?? explicitConfig?.AllowedUrls;
-        if (explicitList != null)
-        {
-            explicitWhitelist.AddRange(explicitList.Where(s => !string.IsNullOrWhiteSpace(s)));
-        }
-
-        // If system configuration specified a whitelist, system whitelist is strictly enforced and cannot be widened
-        var combinedWhitelist = new List<string>(systemWhitelist);
-        if (combinedWhitelist.Count == 0 && explicitWhitelist.Count > 0)
-        {
-            combinedWhitelist.AddRange(explicitWhitelist);
-        }
-
-        var forceFilterHidden = (system?.ForceFilterHiddenText ?? false) || (explicitConfig?.ForceFilterHiddenText ?? false);
-        var forceDetectPromptInjection = (system?.ForceDetectPromptInjection ?? false) || (explicitConfig?.ForceDetectPromptInjection ?? false);
+        var forceFilterHidden = config.ForceFilterHiddenText ?? false;
+        var forceDetectPromptInjection = config.ForceDetectPromptInjection ?? false;
 
         var filterHidden = forceFilterHidden
-            || (explicitConfig?.FilterHiddenText ?? system?.FilterHiddenText ?? true);
+            || (config.FilterHiddenText ?? true);
 
         var detectPromptInjection = forceDetectPromptInjection
-            || (explicitConfig?.DetectPromptInjection ?? system?.DetectPromptInjection ?? true);
+            || (config.DetectPromptInjection ?? true);
 
-        var action = explicitConfig?.PromptInjectionAction
-            ?? system?.PromptInjectionAction
-            ?? PromptInjectionAction.Block;
+        var action = config.PromptInjectionAction ?? PromptInjectionAction.Block;
 
         return new SafetyPolicy
         {
-            UrlWhitelist = combinedWhitelist,
-            SystemUrlWhitelist = systemWhitelist,
+            UrlWhitelist = whitelist,
             FilterHiddenText = filterHidden,
             ForceFilterHiddenText = forceFilterHidden,
             DetectPromptInjection = detectPromptInjection,

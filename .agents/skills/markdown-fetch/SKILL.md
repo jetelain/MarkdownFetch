@@ -112,8 +112,6 @@ export MARKITDOWN_API_URL="http://127.0.0.1:8490"
 | `--no-filter-hidden-text` | | Disable filtering of hidden HTML elements. | |
 | `--detect-prompt-injection` | | Detect adversarial prompt injection in fetched content. | `true` |
 | `--no-detect-prompt-injection` | | Disable prompt injection detection. | |
-| `--url-whitelist <pattern...>` | | Permitted URL pattern(s) or domain(s). | none |
-| `--safety-config <path>` | | Path to safety configuration JSON file. | |
 | `--help` | `-h`, `-?` | Display usage and help message. | |
 
 ---
@@ -123,8 +121,8 @@ export MARKITDOWN_API_URL="http://127.0.0.1:8490"
 `mdfetch` has safety guards built-in to protect AI agents from untrusted web pages and malicious documents:
 - **Hidden Text Filtering** (on by default): Strips invisible text/elements (`display:none`, `visibility:hidden`, `[hidden]`, `[aria-hidden="true"]`, offscreen text, zero-width spaces).
 - **Prompt Injection Detection** (on by default): Rejects content attempting jailbreaks, system instruction overrides, or token injections.
-- **URL Whitelisting** (none by default): Restricts requests to whitelisted hosts/patterns.
-- **Protected Configuration**: In container environments, a read-only configuration at `/etc/mdfetch/safety.json` or `MDFETCH_SAFETY_CONFIG` can enforce safety guards and whitelist policies that agents cannot disable or tamper with.
+- **URL Whitelisting**: Restricts requests to whitelisted hosts/patterns configured via the safety configuration.
+- **Protected Safety Configuration**: In container environments, a read-only configuration at `/etc/mdfetch/safety.json` (or `%ProgramData%\MarkdownFetch\safety.json` on Windows, or fallback `MDFETCH_SAFETY_CONFIG`) can enforce safety guards and whitelist policies that agents cannot disable or tamper with. System configuration takes priority over environment variables.
 
 ---
 

@@ -384,36 +384,6 @@ public class FetchMarkdownUseCaseTests
         Assert.Contains(console.Errors, e => e.Contains("not permitted by URL whitelist"));
     }
 
-    [Fact]
-    public async Task ExecuteAsync_WhenUrlNotAllowedBySystemWhitelist_Returns1AndDoesNotDownload()
-    {
-        var downloadInvoked = false;
-        var downloader = new FakeResourceDownloader
-        {
-            OnDownload = (_, _, _) =>
-            {
-                downloadInvoked = true;
-                return Task.FromResult(new DownloadedResource(new MemoryStream(), "test.html", "text/html"));
-            }
-        };
-        var nativeConverter = new FakeNativeMarkdownConverter();
-        var client = new FakeMarkitdownClient();
-        var writer = new FakeOutputWriter();
-        var console = new FakeConsoleView();
-
-        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
-        var options = new MarkdownFetchOptions
-        {
-            Url = new Uri("https://evil.com/payload"),
-            SystemUrlWhitelist = new[] { "allowed.com" }
-        };
-
-        var result = await useCase.ExecuteAsync(options);
-
-        Assert.Equal(1, result);
-        Assert.False(downloadInvoked);
-        Assert.Contains(console.Errors, e => e.Contains("not permitted by system safety whitelist"));
-    }
 
     [Fact]
     public async Task ExecuteAsync_WhenRedirectedUrlNotAllowedByWhitelist_Returns1AndDoesNotWriteOutput()

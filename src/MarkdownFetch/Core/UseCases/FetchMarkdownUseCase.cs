@@ -60,13 +60,7 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        // 1. Safety Guard: Validate initial URL against whitelist policies
-        if (!_urlWhitelistValidator.IsAllowed(options.Url, options.SystemUrlWhitelist))
-        {
-            _consoleView.WriteError($"URL '{options.Url}' is not permitted by system safety whitelist policy.");
-            return 1;
-        }
-
+        // 1. Safety Guard: Validate initial URL against whitelist policy
         if (!_urlWhitelistValidator.IsAllowed(options.Url, options.UrlWhitelist))
         {
             _consoleView.WriteError($"URL '{options.Url}' is not permitted by URL whitelist policy.");
@@ -111,15 +105,9 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
 
         await using (resource)
         {
-            // 2. Safety Guard: Validate redirected URL against whitelist policies
+            // 2. Safety Guard: Validate redirected URL against whitelist policy
             if (resource.Url != null)
             {
-                if (!_urlWhitelistValidator.IsAllowed(resource.Url, options.SystemUrlWhitelist))
-                {
-                    _consoleView.WriteError($"Redirected URL '{resource.Url}' is not permitted by system safety whitelist policy.");
-                    return 1;
-                }
-
                 if (!_urlWhitelistValidator.IsAllowed(resource.Url, options.UrlWhitelist))
                 {
                     _consoleView.WriteError($"Redirected URL '{resource.Url}' is not permitted by URL whitelist policy.");

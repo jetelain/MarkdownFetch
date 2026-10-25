@@ -61,8 +61,8 @@ public class CommandLineConfigurationTests
         Assert.Contains("--no-filter-hidden-text", options);
         Assert.Contains("--detect-prompt-injection", options);
         Assert.Contains("--no-detect-prompt-injection", options);
-        Assert.Contains("--url-whitelist", options);
-        Assert.Contains("--safety-config", options);
+        Assert.DoesNotContain("--url-whitelist", options);
+        Assert.DoesNotContain("--safety-config", options);
     }
 
     [Fact]
@@ -265,14 +265,20 @@ public class CommandLineConfigurationTests
     }
 
     [Fact]
-    public async Task CreateRootCommand_WithUrlWhitelist_ParsesWhitelistEntries()
+    public async Task CreateRootCommand_LoadsUrlWhitelistFromSafetyPolicy()
     {
         MarkdownFetchOptions? capturedOptions = null;
 
-        var rootCommand = CommandLineConfiguration.CreateRootCommand(() =>
-            new InspectingUseCase(opt => capturedOptions = opt));
+        var mockLoader = new FakeSafetyConfigurationLoader(new SafetyPolicy
+        {
+            UrlWhitelist = new[] { "*.github.com", "learn.microsoft.com" }
+        });
 
-        var exitCode = await rootCommand.Parse("https://example.com/page --url-whitelist *.github.com learn.microsoft.com").InvokeAsync();
+        var rootCommand = CommandLineConfiguration.CreateRootCommand(
+            () => new InspectingUseCase(opt => capturedOptions = opt),
+            mockLoader);
+
+        var exitCode = await rootCommand.Parse("https://example.com/page").InvokeAsync();
 
         Assert.Equal(0, exitCode);
         Assert.NotNull(capturedOptions);
@@ -307,8 +313,8 @@ public class CommandLineConfigurationTests
         // Both guards must still be TRUE because the safety policy forces them!
         Assert.True(capturedOptions.FilterHiddenText);
         Assert.True(capturedOptions.DetectPromptInjection);
-        Assert.Single(capturedOptions.SystemUrlWhitelist);
-        Assert.Contains("*.github.com", capturedOptions.SystemUrlWhitelist);
+        Assert.Single(capturedOptions.UrlWhitelist);
+        Assert.Contains("*.github.com", capturedOptions.UrlWhitelist);
     }
 
     private class FakeSafetyConfigurationLoader : ISafetyConfigurationLoader
@@ -320,7 +326,7 @@ public class CommandLineConfigurationTests
             _policy = policy;
         }
 
-        public SafetyPolicy LoadPolicy(string? explicitConfigPath = null) => _policy;
+        public SafetyPolicy LoadPolicy(string? customPath = null) => _policy;
     }
 
     private class InspectingUseCase : IFetchMarkdownUseCase

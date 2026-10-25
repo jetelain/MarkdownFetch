@@ -55,40 +55,31 @@ public class SafetyConfigurationLoaderTests
     }
 
     [Fact]
-    public void LoadPolicy_SystemConfigCannotBeTemperedByExplicitConfigToDisableGuards()
+    public void LoadPolicy_WithCustomPath_LoadsSpecifiedConfigurationFile()
     {
-        var systemJson = """
+        var json = """
         {
-            "forceFilterHiddenText": true,
-            "forceDetectPromptInjection": true
-        }
-        """;
-
-        var cliJson = """
-        {
-            "filterHiddenText": false,
-            "detectPromptInjection": false
+            "urlWhitelist": ["custom.example.com"],
+            "filterHiddenText": false
         }
         """;
 
         var files = new Dictionary<string, string>
         {
-            ["/etc/mdfetch/safety.json"] = systemJson,
-            ["/tmp/agent-tamper.json"] = cliJson
+            ["/tmp/custom.json"] = json
         };
 
         var loader = new SafetyConfigurationLoader(
-            customSearchPaths: new[] { "/etc/mdfetch/safety.json" },
+            customSearchPaths: null,
             fileExists: path => files.ContainsKey(path),
             readFile: path => files[path]);
 
-        var policy = loader.LoadPolicy("/tmp/agent-tamper.json");
+        var policy = loader.LoadPolicy("/tmp/custom.json");
 
-        // The system config forced guards cannot be turned off by the CLI config
-        Assert.True(policy.FilterHiddenText);
-        Assert.True(policy.ForceFilterHiddenText);
-        Assert.True(policy.DetectPromptInjection);
-        Assert.True(policy.ForceDetectPromptInjection);
+        Assert.Equal("/tmp/custom.json", policy.LoadedFromPath);
+        Assert.Single(policy.UrlWhitelist);
+        Assert.Contains("custom.example.com", policy.UrlWhitelist);
+        Assert.False(policy.FilterHiddenText);
     }
 
     [Fact]
@@ -170,8 +161,8 @@ public class SafetyConfigurationLoaderTests
 
             // Must have loaded the system config, NOT the agent's environment variable!
             Assert.Equal("/etc/mdfetch/safety.json", policy.LoadedFromPath);
-            Assert.Contains("system.example.com", policy.SystemUrlWhitelist);
-            Assert.DoesNotContain("evil.example.com", policy.SystemUrlWhitelist);
+            Assert.Contains("system.example.com", policy.UrlWhitelist);
+            Assert.DoesNotContain("evil.example.com", policy.UrlWhitelist);
             Assert.True(policy.ForceFilterHiddenText);
         }
         finally
@@ -209,46 +200,12 @@ public class SafetyConfigurationLoaderTests
             var policy = loader.LoadPolicy();
 
             Assert.Equal("/custom/env-safety.json", policy.LoadedFromPath);
-            Assert.Contains("env.example.com", policy.SystemUrlWhitelist);
+            Assert.Contains("env.example.com", policy.UrlWhitelist);
             Assert.True(policy.ForceFilterHiddenText);
         }
         finally
         {
             Environment.SetEnvironmentVariable("MDFETCH_SAFETY_CONFIG", prevEnv);
         }
-    }
-
-    [Fact]
-    public void LoadPolicy_SystemWhitelistCannotBeWidenedByExplicitConfig()
-    {
-        var systemJson = """
-        {
-            "urlWhitelist": ["*.github.com"]
-        }
-        """;
-
-        var cliJson = """
-        {
-            "urlWhitelist": ["evil.com"]
-        }
-        """;
-
-        var files = new Dictionary<string, string>
-        {
-            ["/etc/mdfetch/safety.json"] = systemJson,
-            ["/tmp/user.json"] = cliJson
-        };
-
-        var loader = new SafetyConfigurationLoader(
-            customSearchPaths: new[] { "/etc/mdfetch/safety.json" },
-            fileExists: path => files.ContainsKey(path),
-            readFile: path => files[path]);
-
-        var policy = loader.LoadPolicy("/tmp/user.json");
-
-        // System whitelist is isolated and contains only *.github.com
-        Assert.Single(policy.SystemUrlWhitelist);
-        Assert.Contains("*.github.com", policy.SystemUrlWhitelist);
-        Assert.DoesNotContain("evil.com", policy.SystemUrlWhitelist);
     }
 }

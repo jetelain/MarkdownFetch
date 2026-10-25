@@ -28,22 +28,12 @@ public sealed record MarkdownFetchOptions
     public bool DetectPromptInjection { get; init; } = true;
 
     /// <summary>
-    /// Allowed URL patterns / domains. If empty, all URLs are permitted unless restricted by safety policy.
+    /// Allowed URL patterns / domains configured by safety policy. If empty, all URLs are permitted.
     /// </summary>
     public IReadOnlyList<string> UrlWhitelist { get; init; } = Array.Empty<string>();
-
-    /// <summary>
-    /// System-enforced URL patterns from protected configuration that cannot be bypassed or widened by CLI arguments.
-    /// </summary>
-    public IReadOnlyList<string> SystemUrlWhitelist { get; init; } = Array.Empty<string>();
 
     /// <summary>
     /// Action to take when prompt injection is detected (default: Block).
     /// </summary>
     public PromptInjectionAction PromptInjectionAction { get; init; } = PromptInjectionAction.Block;
-
-    /// <summary>
-    /// Optional path to a safety configuration file.
-    /// </summary>
-    public string? SafetyConfigPath { get; init; }
 }

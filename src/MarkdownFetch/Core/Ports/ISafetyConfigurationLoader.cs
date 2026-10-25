@@ -3,15 +3,14 @@ using MarkdownFetch.Core.Models;
 namespace MarkdownFetch.Core.Ports;
 
 /// <summary>
-/// Port for loading system and explicit safety configurations.
+/// Port for loading system and environment safety configurations.
 /// </summary>
 public interface ISafetyConfigurationLoader
 {
     /// <summary>
-    /// Discovers and loads safety policies from system/container paths, environment variables,
-    /// and any explicitly provided configuration file.
+    /// Discovers and loads safety policies from system/container paths or environment variables.
     /// </summary>
-    /// <param name="explicitConfigPath">Optional path provided via CLI.</param>
-    /// <returns>The combined immutable safety policy.</returns>
-    SafetyPolicy LoadPolicy(string? explicitConfigPath = null);
+    /// <param name="customPath">Optional configuration path (primarily for testing).</param>
+    /// <returns>The immutable safety policy.</returns>
+    SafetyPolicy LoadPolicy(string? customPath = null);
 }

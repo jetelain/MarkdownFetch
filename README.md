@@ -131,8 +131,6 @@ mdfetch https://example.com -t 60
 | `--no-filter-hidden-text` | | Disable filtering of hidden HTML elements. | |
 | `--detect-prompt-injection` | | Detect adversarial prompt injection patterns in fetched content. | `true` |
 | `--no-detect-prompt-injection` | | Disable prompt injection detection. | |
-| `--url-whitelist <pattern...>` | | Permitted URL patterns or domains (e.g. `github.com`, `*.github.com`). If not specified, all URLs are allowed unless restricted by safety policy. | none |
-| `--safety-config <path>` | | Path to a safety configuration JSON file. | |
 | `--help` | `-h`, `-?` | Show help and usage information. | |
 | `--version` | | Show version information. | |
 
@@ -144,15 +142,15 @@ mdfetch https://example.com -t 60
 
 1. **Hidden Text Filtering**: Filters invisible text from HTML (elements with `display:none`, `visibility:hidden`, `opacity:0`, `font-size:0`, `[hidden]`, `[aria-hidden="true"]`, off-screen styling, and zero-width unicode characters). Enabled by default.
 2. **Prompt Injection Detection**: Scans downloaded content across all formats (HTML, PDF, DOCX, text) for jailbreaks, instruction overrides, system token injections (`<|im_start|>`, `[INST]`), exfiltration directives, and agent targeting attacks. Enabled by default.
-3. **URL Whitelisting**: Restricts downloads (and redirect targets) to specific allowed domains, wildcards (`*.github.com`), or URL prefixes.
+3. **URL Whitelisting**: Restricts downloads (and redirect targets) to specific allowed domains, wildcards (`*.github.com`), or URL prefixes. The whitelist belongs strictly to the safety configuration file and cannot be modified via CLI flags.
 
 ### Tamper-Proof Container Configuration
 
 For sandboxed or containered agent environments (e.g. Docker, Kubernetes), administrators can mount a read-only configuration file that the agent cannot tamper with:
 
-* **Linux / Containers**: `/etc/markdownfetch/safety.json` or `/etc/mdfetch/safety.json` (mount as read-only `:ro`)
-* **Environment Variable**: `MDFETCH_SAFETY_CONFIG=/path/to/protected/safety.json`
-* **Windows**: `%ProgramData%\MarkdownFetch\safety.json`
+* **Linux / Containers**: `/etc/markdownfetch/safety.json` or `/etc/mdfetch/safety.json` (mount as read-only `:ro`, takes highest priority)
+* **Windows**: `%ProgramData%\MarkdownFetch\safety.json` (takes highest priority on Windows)
+* **Environment Variable**: `MDFETCH_SAFETY_CONFIG=/path/to/protected/safety.json` (fallback when no system config exists; cannot override system configuration)
 
 Example `safety.json`:
 
