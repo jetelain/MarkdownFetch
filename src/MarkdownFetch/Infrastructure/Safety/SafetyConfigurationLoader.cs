@@ -65,17 +65,7 @@ public sealed class SafetyConfigurationLoader : ISafetyConfigurationLoader
             return null;
         }
 
-        // 1. Environment variable
-        var envVar = Environment.GetEnvironmentVariable("MDFETCH_SAFETY_CONFIG")
-                     ?? Environment.GetEnvironmentVariable("MARKDOWNFETCH_SAFETY_CONFIG")
-                     ?? Environment.GetEnvironmentVariable("MDFETCH_CONFIG_PATH");
-
-        if (!string.IsNullOrWhiteSpace(envVar) && _fileExists(envVar))
-        {
-            return envVar;
-        }
-
-        // 2. Standard Linux / Unix / Container paths
+        // 1. Standard Linux / Unix / Container paths (HIGHEST PRIORITY - cannot be bypassed by agent environment variables)
         var linuxPaths = new[]
         {
             "/etc/markdownfetch/safety.json",
@@ -92,7 +82,7 @@ public sealed class SafetyConfigurationLoader : ISafetyConfigurationLoader
             }
         }
 
-        // 3. Windows ProgramData paths
+        // 2. Windows ProgramData paths (HIGHEST PRIORITY on Windows)
         try
         {
             var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
@@ -108,6 +98,16 @@ public sealed class SafetyConfigurationLoader : ISafetyConfigurationLoader
         catch
         {
             // Ignore environment path lookup failures
+        }
+
+        // 3. Environment variable (FALLBACK only when no system configuration file exists on disk)
+        var envVar = Environment.GetEnvironmentVariable("MDFETCH_SAFETY_CONFIG")
+                     ?? Environment.GetEnvironmentVariable("MARKDOWNFETCH_SAFETY_CONFIG")
+                     ?? Environment.GetEnvironmentVariable("MDFETCH_CONFIG_PATH");
+
+        if (!string.IsNullOrWhiteSpace(envVar) && _fileExists(envVar))
+        {
+            return envVar;
         }
 
         return null;
@@ -150,26 +150,25 @@ public sealed class SafetyConfigurationLoader : ISafetyConfigurationLoader
 
     private static SafetyPolicy MergePolicies(SafetyConfiguration? system, SafetyConfiguration? explicitConfig, string? loadedPath)
     {
-        var whitelist = new List<string>();
-
-        // System whitelist
+        var systemWhitelist = new List<string>();
         var systemList = system?.UrlWhitelist ?? system?.AllowedUrls;
         if (systemList != null)
         {
-            whitelist.AddRange(systemList.Where(s => !string.IsNullOrWhiteSpace(s)));
+            systemWhitelist.AddRange(systemList.Where(s => !string.IsNullOrWhiteSpace(s)));
         }
 
-        // Explicit whitelist
+        var explicitWhitelist = new List<string>();
         var explicitList = explicitConfig?.UrlWhitelist ?? explicitConfig?.AllowedUrls;
         if (explicitList != null)
         {
-            foreach (var item in explicitList)
-            {
-                if (!string.IsNullOrWhiteSpace(item) && !whitelist.Contains(item, StringComparer.OrdinalIgnoreCase))
-                {
-                    whitelist.Add(item);
-                }
-            }
+            explicitWhitelist.AddRange(explicitList.Where(s => !string.IsNullOrWhiteSpace(s)));
+        }
+
+        // If system configuration specified a whitelist, system whitelist is strictly enforced and cannot be widened
+        var combinedWhitelist = new List<string>(systemWhitelist);
+        if (combinedWhitelist.Count == 0 && explicitWhitelist.Count > 0)
+        {
+            combinedWhitelist.AddRange(explicitWhitelist);
         }
 
         var forceFilterHidden = (system?.ForceFilterHiddenText ?? false) || (explicitConfig?.ForceFilterHiddenText ?? false);
@@ -187,7 +186,8 @@ public sealed class SafetyConfigurationLoader : ISafetyConfigurationLoader
 
         return new SafetyPolicy
         {
-            UrlWhitelist = whitelist,
+            UrlWhitelist = combinedWhitelist,
+            SystemUrlWhitelist = systemWhitelist,
             FilterHiddenText = filterHidden,
             ForceFilterHiddenText = forceFilterHidden,
             DetectPromptInjection = detectPromptInjection,

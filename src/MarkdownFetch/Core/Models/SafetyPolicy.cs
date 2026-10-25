@@ -11,6 +11,11 @@ public sealed record SafetyPolicy
     public IReadOnlyList<string> UrlWhitelist { get; init; } = Array.Empty<string>();
 
     /// <summary>
+    /// System-enforced URL patterns from protected configuration that cannot be bypassed or widened by CLI arguments.
+    /// </summary>
+    public IReadOnlyList<string> SystemUrlWhitelist { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Default state for hidden text filtering.
     /// </summary>
     public bool FilterHiddenText { get; init; } = true;

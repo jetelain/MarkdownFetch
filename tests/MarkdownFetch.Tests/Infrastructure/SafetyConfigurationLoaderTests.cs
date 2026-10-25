@@ -133,13 +133,122 @@ public class SafetyConfigurationLoaderTests
     }
 
     [Fact]
-    public void LoadPolicy_MissingExplicitFile_ThrowsFileNotFoundException()
+    public void LoadPolicy_SystemConfigTakesPrecedenceOverEnvironmentVariable()
     {
-        var loader = new SafetyConfigurationLoader(
-            customSearchPaths: Array.Empty<string>(),
-            fileExists: _ => false,
-            readFile: _ => throw new FileNotFoundException());
+        var prevEnv = Environment.GetEnvironmentVariable("MDFETCH_SAFETY_CONFIG");
+        try
+        {
+            Environment.SetEnvironmentVariable("MDFETCH_SAFETY_CONFIG", "/tmp/agent-env-config.json");
 
-        Assert.Throws<FileNotFoundException>(() => loader.LoadPolicy("/non/existent/path.json"));
+            var systemJson = """
+            {
+                "urlWhitelist": ["system.example.com"],
+                "forceFilterHiddenText": true
+            }
+            """;
+
+            var agentJson = """
+            {
+                "urlWhitelist": ["evil.example.com"],
+                "filterHiddenText": false
+            }
+            """;
+
+            var files = new Dictionary<string, string>
+            {
+                ["/etc/mdfetch/safety.json"] = systemJson,
+                ["/tmp/agent-env-config.json"] = agentJson
+            };
+
+            // Custom search paths is null to test standard lookup
+            var loader = new SafetyConfigurationLoader(
+                customSearchPaths: null,
+                fileExists: path => files.ContainsKey(path),
+                readFile: path => files[path]);
+
+            var policy = loader.LoadPolicy();
+
+            // Must have loaded the system config, NOT the agent's environment variable!
+            Assert.Equal("/etc/mdfetch/safety.json", policy.LoadedFromPath);
+            Assert.Contains("system.example.com", policy.SystemUrlWhitelist);
+            Assert.DoesNotContain("evil.example.com", policy.SystemUrlWhitelist);
+            Assert.True(policy.ForceFilterHiddenText);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MDFETCH_SAFETY_CONFIG", prevEnv);
+        }
+    }
+
+    [Fact]
+    public void LoadPolicy_UsesEnvironmentVariableWhenNoSystemConfigFileExists()
+    {
+        var prevEnv = Environment.GetEnvironmentVariable("MDFETCH_SAFETY_CONFIG");
+        try
+        {
+            Environment.SetEnvironmentVariable("MDFETCH_SAFETY_CONFIG", "/custom/env-safety.json");
+
+            var envJson = """
+            {
+                "urlWhitelist": ["env.example.com"],
+                "forceFilterHiddenText": true
+            }
+            """;
+
+            var files = new Dictionary<string, string>
+            {
+                ["/custom/env-safety.json"] = envJson
+            };
+
+            // No /etc/... files exist
+            var loader = new SafetyConfigurationLoader(
+                customSearchPaths: null,
+                fileExists: path => files.ContainsKey(path),
+                readFile: path => files[path]);
+
+            var policy = loader.LoadPolicy();
+
+            Assert.Equal("/custom/env-safety.json", policy.LoadedFromPath);
+            Assert.Contains("env.example.com", policy.SystemUrlWhitelist);
+            Assert.True(policy.ForceFilterHiddenText);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MDFETCH_SAFETY_CONFIG", prevEnv);
+        }
+    }
+
+    [Fact]
+    public void LoadPolicy_SystemWhitelistCannotBeWidenedByExplicitConfig()
+    {
+        var systemJson = """
+        {
+            "urlWhitelist": ["*.github.com"]
+        }
+        """;
+
+        var cliJson = """
+        {
+            "urlWhitelist": ["evil.com"]
+        }
+        """;
+
+        var files = new Dictionary<string, string>
+        {
+            ["/etc/mdfetch/safety.json"] = systemJson,
+            ["/tmp/user.json"] = cliJson
+        };
+
+        var loader = new SafetyConfigurationLoader(
+            customSearchPaths: new[] { "/etc/mdfetch/safety.json" },
+            fileExists: path => files.ContainsKey(path),
+            readFile: path => files[path]);
+
+        var policy = loader.LoadPolicy("/tmp/user.json");
+
+        // System whitelist is isolated and contains only *.github.com
+        Assert.Single(policy.SystemUrlWhitelist);
+        Assert.Contains("*.github.com", policy.SystemUrlWhitelist);
+        Assert.DoesNotContain("evil.com", policy.SystemUrlWhitelist);
     }
 }

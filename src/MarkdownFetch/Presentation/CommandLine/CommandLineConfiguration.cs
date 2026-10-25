@@ -266,8 +266,8 @@ public static class CommandLineConfiguration
                 Timeout = TimeSpan.FromSeconds(timeoutSeconds),
                 FilterHiddenText = filterHiddenText,
                 DetectPromptInjection = detectPromptInjection,
-                UrlWhitelist = cliWhitelistEntries,
-                SystemUrlWhitelist = safetyPolicy.UrlWhitelist,
+                UrlWhitelist = cliWhitelistEntries.Count > 0 ? cliWhitelistEntries : safetyPolicy.UrlWhitelist,
+                SystemUrlWhitelist = safetyPolicy.SystemUrlWhitelist.Count > 0 ? safetyPolicy.SystemUrlWhitelist : safetyPolicy.UrlWhitelist,
                 PromptInjectionAction = safetyPolicy.PromptInjectionAction,
                 SafetyConfigPath = explicitConfigPath ?? safetyPolicy.LoadedFromPath
             };
