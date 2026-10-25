@@ -560,5 +560,54 @@ public class FetchMarkdownUseCaseTests
         Assert.NotNull(capturedOptions);
         Assert.False(capturedOptions.FilterHiddenText);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenApiUrlNotAllowedByWhitelist_Returns1AndDoesNotCallApi()
+    {
+        var downloader = new FakeResourceDownloader();
+        var nativeConverter = new FakeNativeMarkdownConverter();
+        var client = new FakeMarkitdownClient();
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://github.com/doc.html"),
+            Engine = ConversionEngine.Api,
+            ApiUrl = "https://evil-attacker.com",
+            UrlWhitelist = new[] { "*.github.com" }
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(1, result);
+        Assert.Contains(console.Errors, e => e.Contains("API URL 'https://evil-attacker.com' is not permitted"));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenApiUrlIsLocalhost_AllowsApiConversionWithWhitelist()
+    {
+        var downloader = new FakeResourceDownloader();
+        var nativeConverter = new FakeNativeMarkdownConverter();
+        var client = new FakeMarkitdownClient();
+        var writer = new FakeOutputWriter();
+        var console = new FakeConsoleView();
+
+        var useCase = new FetchMarkdownUseCase(downloader, nativeConverter, client, writer, console);
+        var options = new MarkdownFetchOptions
+        {
+            Url = new Uri("https://github.com/doc.html"),
+            Engine = ConversionEngine.Api,
+            ApiUrl = "http://127.0.0.1:8490",
+            UrlWhitelist = new[] { "*.github.com" }
+        };
+
+        var result = await useCase.ExecuteAsync(options);
+
+        Assert.Equal(0, result);
+        Assert.NotNull(writer.WrittenMarkdown);
+        Assert.Empty(console.Errors);
+    }
 }
 

@@ -9,15 +9,16 @@ using MarkdownFetch.Presentation.CommandLine;
 
 var rootCommand = CommandLineConfiguration.CreateRootCommand(() =>
 {
-    var httpClient = new HttpClient();
+    var httpHandler = new SocketsHttpHandler { AllowAutoRedirect = false };
+    var httpClient = new HttpClient(httpHandler);
     httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("MarkdownFetch", "1.0"));
 
-    IResourceDownloader downloader = new HttpResourceDownloader(httpClient);
+    IUrlWhitelistValidator urlWhitelistValidator = new UrlWhitelistValidator();
+    IResourceDownloader downloader = new HttpResourceDownloader(httpClient, urlWhitelistValidator);
     INativeMarkdownConverter nativeConverter = new NativeMarkdownConverter();
     IMarkitdownClient markitdownClient = new MarkitdownApiClient(httpClient);
     IOutputWriter outputWriter = new OutputWriter();
     IConsoleView consoleView = new ConsoleView();
-    IUrlWhitelistValidator urlWhitelistValidator = new UrlWhitelistValidator();
     IPromptInjectionDetector promptInjectionDetector = new PromptInjectionDetector();
 
     return new FetchMarkdownUseCase(

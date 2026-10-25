@@ -52,12 +52,42 @@ public sealed class UrlWhitelistValidator : IUrlWhitelistValidator
             return MatchesWildcard(url.AbsoluteUri, rule, ignoreCase: true);
         }
 
+        // Host + Path pattern without scheme (e.g. "example.com/api/*" or "*.example.com/docs/*")
+        if (rule.Contains('/', StringComparison.Ordinal))
+        {
+            var hostAndPath = url.Host + url.PathAndQuery;
+            var authorityAndPath = url.Authority + url.PathAndQuery;
+
+            if (MatchesWildcard(hostAndPath, rule, ignoreCase: true) ||
+                MatchesWildcard(authorityAndPath, rule, ignoreCase: true))
+            {
+                return true;
+            }
+
+            // Also support *.example.com/path matching apex domain example.com/path
+            if (rule.StartsWith("*.", StringComparison.Ordinal))
+            {
+                var apexRule = rule[2..];
+                if (MatchesWildcard(hostAndPath, apexRule, ignoreCase: true) ||
+                    MatchesWildcard(authorityAndPath, apexRule, ignoreCase: true))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         // Host / Host:Port pattern
         string hostPattern = rule;
         int? expectedPort = null;
 
         var colonIndex = rule.LastIndexOf(':');
-        if (colonIndex > 0 && !rule.EndsWith(':') && !rule.Contains('/'))
+        bool isPortColon = colonIndex > 0 &&
+                           !rule.EndsWith(':') &&
+                           (rule.IndexOf(':') == colonIndex || (rule.StartsWith('[') && colonIndex > rule.IndexOf(']')));
+
+        if (isPortColon)
         {
             var portPart = rule[(colonIndex + 1)..];
             if (int.TryParse(portPart, out var port))
@@ -93,8 +123,20 @@ public sealed class UrlWhitelistValidator : IUrlWhitelistValidator
             return MatchesWildcard(url.Host, hostPattern, ignoreCase: true);
         }
 
-        // Exact host match
-        return url.Host.Equals(hostPattern, StringComparison.OrdinalIgnoreCase);
+        // Exact host match (handling IPv6 brackets in url.Host vs rule)
+        if (url.Host.Equals(hostPattern, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (url.HostNameType == UriHostNameType.IPv6)
+        {
+            var cleanHost = url.Host.Trim('[', ']');
+            var cleanPattern = hostPattern.Trim('[', ']');
+            return cleanHost.Equals(cleanPattern, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
     }
 
     private static bool MatchesWildcard(string input, string pattern, bool ignoreCase)

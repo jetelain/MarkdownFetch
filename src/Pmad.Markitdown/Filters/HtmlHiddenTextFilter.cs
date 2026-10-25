@@ -38,7 +38,7 @@ public static partial class HtmlHiddenTextFilter
     [GeneratedRegex(@"(?:^|;)\s*clip-path\s*:\s*(?:inset\(100%\)|circle\(0(?:px)?\))(?:\s*!important)?(?:\s*;|\s*$)", RegexOptions.IgnoreCase)]
     private static partial Regex ClipPathZeroRegex();
 
-    [GeneratedRegex(@"[\u200B-\u200D\uFEFF\u2060]")]
+    [GeneratedRegex(@"[\u00AD\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]")]
     private static partial Regex InvisibleCharsRegex();
 
     /// <summary>
@@ -121,7 +121,7 @@ public static partial class HtmlHiddenTextFilter
         var document = parser.ParseDocument(rawHtml);
         RemoveHiddenElements(document);
 
-        var result = document.Body != null ? document.Body.InnerHtml : document.DocumentElement.OuterHtml;
+        var result = document.DocumentElement != null ? document.DocumentElement.OuterHtml : rawHtml;
         return StripInvisibleCharacters(result);
     }
 

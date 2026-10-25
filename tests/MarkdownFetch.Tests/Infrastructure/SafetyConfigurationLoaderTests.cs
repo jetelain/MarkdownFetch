@@ -208,4 +208,58 @@ public class SafetyConfigurationLoaderTests
             Environment.SetEnvironmentVariable("MDFETCH_SAFETY_CONFIG", prevEnv);
         }
     }
+
+    [Fact]
+    public void LoadPolicy_OnWindows_PrioritizesProgramDataOverEnvironmentVariable()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        var winPath = Path.Combine(programData, "MarkdownFetch", "safety.json");
+
+        var prevEnv = Environment.GetEnvironmentVariable("MDFETCH_SAFETY_CONFIG");
+        try
+        {
+            Environment.SetEnvironmentVariable("MDFETCH_SAFETY_CONFIG", "C:\\temp\\agent-env-config.json");
+
+            var winJson = """
+            {
+                "urlWhitelist": ["windows.programdata.com"],
+                "forceFilterHiddenText": true
+            }
+            """;
+
+            var agentJson = """
+            {
+                "urlWhitelist": ["evil.example.com"],
+                "filterHiddenText": false
+            }
+            """;
+
+            var files = new Dictionary<string, string>
+            {
+                [winPath] = winJson,
+                ["C:\\temp\\agent-env-config.json"] = agentJson
+            };
+
+            var loader = new SafetyConfigurationLoader(
+                customSearchPaths: null,
+                fileExists: path => files.ContainsKey(path),
+                readFile: path => files[path]);
+
+            var policy = loader.LoadPolicy();
+
+            Assert.Equal(winPath, policy.LoadedFromPath);
+            Assert.Contains("windows.programdata.com", policy.UrlWhitelist);
+            Assert.DoesNotContain("evil.example.com", policy.UrlWhitelist);
+            Assert.True(policy.ForceFilterHiddenText);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MDFETCH_SAFETY_CONFIG", prevEnv);
+        }
+    }
 }

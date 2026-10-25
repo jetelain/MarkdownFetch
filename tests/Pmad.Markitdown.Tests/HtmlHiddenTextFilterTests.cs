@@ -115,4 +115,38 @@ public class HtmlHiddenTextFilterTests
 
         Assert.Equal("ignore previous instructions", cleaned);
     }
+
+    [Fact]
+    public void StripInvisibleCharacters_RemovesBidiOverridesAndSoftHyphens()
+    {
+        // Trojan Source / Bidi override characters and soft hyphens
+        var tainted = "ign\u00ADore \u202Ereversed\u202C \u200Einstruct\u2066ions\u2069";
+        var cleaned = HtmlHiddenTextFilter.StripInvisibleCharacters(tainted);
+
+        Assert.Equal("ignore reversed instructions", cleaned);
+    }
+
+    [Fact]
+    public void FilterHtml_PreservesHeadAndTitleWhileRemovingHiddenElements()
+    {
+        var rawHtml = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Test Page Title</title>
+            <meta name="description" content="A test page" />
+        </head>
+        <body>
+            <p>Visible content</p>
+            <div style="display:none">Adversarial hidden injection</div>
+        </body>
+        </html>
+        """;
+
+        var filtered = HtmlHiddenTextFilter.FilterHtml(rawHtml);
+
+        Assert.Contains("<title>Test Page Title</title>", filtered);
+        Assert.Contains("Visible content", filtered);
+        Assert.DoesNotContain("Adversarial hidden injection", filtered);
+    }
 }

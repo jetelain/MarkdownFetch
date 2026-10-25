@@ -71,6 +71,23 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
 
         if (options.Engine == ConversionEngine.Api)
         {
+            if (Uri.TryCreate(apiUrl, UriKind.Absolute, out var parsedApiUri))
+            {
+                if (options.UrlWhitelist != null && options.UrlWhitelist.Count > 0)
+                {
+                    if (!parsedApiUri.IsLoopback && !_urlWhitelistValidator.IsAllowed(parsedApiUri, options.UrlWhitelist))
+                    {
+                        _consoleView.WriteError($"API URL '{apiUrl}' is not permitted by URL whitelist policy.");
+                        return 1;
+                    }
+                }
+            }
+            else
+            {
+                _consoleView.WriteError($"Invalid API URL: '{apiUrl}'");
+                return 1;
+            }
+
             if (!await _markitdownClient.IsReadyAsync(apiUrl, cancellationToken))
             {
                 var port = ResolvePort(apiUrl);
@@ -83,7 +100,7 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
         DownloadedResource resource;
         try
         {
-            resource = await _downloader.DownloadAsync(options.Url, options.Timeout, cancellationToken);
+            resource = await _downloader.DownloadAsync(options.Url, options.Timeout, options.UrlWhitelist, cancellationToken);
         }
         catch (HttpRequestException ex)
         {

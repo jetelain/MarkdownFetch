@@ -62,42 +62,58 @@ public sealed class SafetyConfigurationLoader : ISafetyConfigurationLoader
             return null;
         }
 
-        // 1. Standard Linux / Unix / Container paths (HIGHEST PRIORITY - cannot be bypassed by agent environment variables)
-        var linuxPaths = new[]
+        string? CheckWindowsProgramData()
         {
-            "/etc/markdownfetch/safety.json",
-            "/etc/mdfetch/safety.json",
-            "/etc/markdownfetch.json",
-            "/etc/mdfetch.json"
-        };
-
-        foreach (var path in linuxPaths)
-        {
-            if (_fileExists(path))
+            try
             {
-                return path;
-            }
-        }
+                var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                if (!string.IsNullOrWhiteSpace(programData))
+                {
+                    var winPath1 = Path.Combine(programData, "MarkdownFetch", "safety.json");
+                    if (_fileExists(winPath1)) return winPath1;
 
-        // 2. Windows ProgramData paths (HIGHEST PRIORITY on Windows)
-        try
-        {
-            var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-            if (!string.IsNullOrWhiteSpace(programData))
+                    var winPath2 = Path.Combine(programData, "mdfetch", "safety.json");
+                    if (_fileExists(winPath2)) return winPath2;
+                }
+            }
+            catch
             {
-                var winPath1 = Path.Combine(programData, "MarkdownFetch", "safety.json");
-                if (_fileExists(winPath1)) return winPath1;
-
-                var winPath2 = Path.Combine(programData, "mdfetch", "safety.json");
-                if (_fileExists(winPath2)) return winPath2;
+                // Ignore environment path lookup failures
             }
-        }
-        catch
-        {
-            // Ignore environment path lookup failures
+            return null;
         }
 
-        // 3. Environment variable (FALLBACK only when no system configuration file exists on disk)
+        string? CheckLinuxPaths()
+        {
+            var linuxPaths = new[]
+            {
+                "/etc/markdownfetch/safety.json",
+                "/etc/mdfetch/safety.json",
+                "/etc/markdownfetch.json",
+                "/etc/mdfetch.json"
+            };
+
+            foreach (var path in linuxPaths)
+            {
+                if (_fileExists(path))
+                {
+                    return path;
+                }
+            }
+            return null;
+        }
+
+        // 1. System paths: Prioritize native OS configuration path
+        var systemPath = OperatingSystem.IsWindows()
+            ? (CheckWindowsProgramData() ?? CheckLinuxPaths())
+            : (CheckLinuxPaths() ?? CheckWindowsProgramData());
+
+        if (systemPath != null)
+        {
+            return systemPath;
+        }
+
+        // 2. Environment variable (FALLBACK only when no system configuration file exists on disk)
         var envVar = Environment.GetEnvironmentVariable("MDFETCH_SAFETY_CONFIG")
                      ?? Environment.GetEnvironmentVariable("MARKDOWNFETCH_SAFETY_CONFIG")
                      ?? Environment.GetEnvironmentVariable("MDFETCH_CONFIG_PATH");
