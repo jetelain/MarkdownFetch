@@ -9,7 +9,7 @@ namespace MarkdownFetch.Core.Services;
 /// </summary>
 public static partial class MarkdownLinkResolver
 {
-    [GeneratedRegex(@"(?<prefix>!?\[)(?<text>(?:[^\[\]]|(?<open>\[)|(?<-open>\]))*(?(open)(?!)))\]\((?<url><[^\s>]+>|[^\s\)\""']+)(?<title>\s+[\""'][^\""']*[\""'])?\)", RegexOptions.Compiled)]
+    [GeneratedRegex(@"(?<prefix>!?\[)(?<text>(?:[^\[\]]|(?<open>\[)|(?<-open>\]))*(?(open)(?!)))\]\((?<url><[^\s>]+>|[^\s\)\""']+)(?<title>\s+[\""'][^\""']*[\""'])?\)")]
     private static partial Regex MarkdownLinkRegex();
 
     /// <summary>

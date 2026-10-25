@@ -8,7 +8,7 @@ namespace Pmad.Markitdown.Converters;
 /// <summary>
 /// Converts PDF documents to clean Markdown using PdfPig.
 /// </summary>
-public sealed class PdfToMarkdownConverter : IFormatConverter
+public sealed partial class PdfToMarkdownConverter : IFormatConverter
 {
     public bool CanHandle(string? extension, string? mediaType)
     {
@@ -81,6 +81,9 @@ public sealed class PdfToMarkdownConverter : IFormatConverter
         }
     }
 
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRegex();
+
     private static string NormalizeExtractedText(string text)
     {
         if (string.IsNullOrEmpty(text)) return string.Empty;
@@ -90,7 +93,7 @@ public sealed class PdfToMarkdownConverter : IFormatConverter
 
         foreach (var rawLine in lines)
         {
-            var line = Regex.Replace(rawLine.Trim(), @"\s+", " ");
+            var line = WhitespaceRegex().Replace(rawLine.Trim(), " ");
             if (!string.IsNullOrEmpty(line))
             {
                 sb.AppendLine(line);

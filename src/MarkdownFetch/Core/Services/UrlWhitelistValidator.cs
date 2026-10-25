@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using MarkdownFetch.Core.Ports;
 
 namespace MarkdownFetch.Core.Services;
@@ -100,16 +99,45 @@ public sealed class UrlWhitelistValidator : IUrlWhitelistValidator
 
     private static bool MatchesWildcard(string input, string pattern, bool ignoreCase)
     {
-        var regexPattern = "^" + Regex.Escape(pattern)
-            .Replace(@"\*", ".*")
-            .Replace(@"\?", ".") + "$";
+        return IsWildcardMatch(input.AsSpan(), pattern.AsSpan(), ignoreCase);
+    }
 
-        var options = RegexOptions.CultureInvariant;
-        if (ignoreCase)
+    private static bool IsWildcardMatch(ReadOnlySpan<char> text, ReadOnlySpan<char> pattern, bool ignoreCase)
+    {
+        int t = 0, p = 0;
+        int starIdx = -1, matchIdx = 0;
+
+        while (t < text.Length)
         {
-            options |= RegexOptions.IgnoreCase;
+            if (p < pattern.Length && (pattern[p] == '?' ||
+                (ignoreCase ? char.ToUpperInvariant(text[t]) == char.ToUpperInvariant(pattern[p]) : text[t] == pattern[p])))
+            {
+                t++;
+                p++;
+            }
+            else if (p < pattern.Length && pattern[p] == '*')
+            {
+                starIdx = p;
+                matchIdx = t;
+                p++;
+            }
+            else if (starIdx != -1)
+            {
+                p = starIdx + 1;
+                matchIdx++;
+                t = matchIdx;
+            }
+            else
+            {
+                return false;
+            }
         }
 
-        return Regex.IsMatch(input, regexPattern, options);
+        while (p < pattern.Length && pattern[p] == '*')
+        {
+            p++;
+        }
+
+        return p == pattern.Length;
     }
 }

@@ -7,64 +7,61 @@ namespace MarkdownFetch.Core.Services;
 /// <summary>
 /// Scans content for prompt injection patterns, special control tokens, and adversarial agent directives.
 /// </summary>
-public sealed class PromptInjectionDetector : IPromptInjectionDetector
+public sealed partial class PromptInjectionDetector : IPromptInjectionDetector
 {
     private sealed record InjectionRule(string Name, Regex Pattern);
 
-    private static readonly List<InjectionRule> Rules = new()
-    {
-        // 1. Directive overrides and jailbreaks
-        new("Directive Override", new Regex(
-            @"\b(?:ignore|disregard|forget|skip|override|bypass)\s+(?:all\s+)?(?:previous|prior|above|former|earlier|initial)\s+(?:instructions|directions|commands|rules|prompts|guidelines|context)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+    [GeneratedRegex(@"\b(?:ignore|disregard|forget|skip|override|bypass)\s+(?:all\s+)?(?:previous|prior|above|former|earlier|initial)\s+(?:instructions|directions|commands|rules|prompts|guidelines|context)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex DirectiveOverrideRegex();
 
-        new("Disregard Context", new Regex(
-            @"\b(?:disregard|ignore)\s+everything\s+(?:above|previously\s+stated|prior)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+    [GeneratedRegex(@"\b(?:disregard|ignore)\s+everything\s+(?:above|previously\s+stated|prior)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex DisregardContextRegex();
 
-        new("System Override Directive", new Regex(
-            @"\b(?:new\s+instructions?|system\s+override|admin\s+override)\s*:\s*(?:ignore|you\s+are|act\s+as|forget)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+    [GeneratedRegex(@"\b(?:new\s+instructions?|system\s+override|admin\s+override)\s*:\s*(?:ignore|you\s+are|act\s+as|forget)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex SystemOverrideDirectiveRegex();
 
-        new("Persona Hijack / Developer Mode", new Regex(
-            @"\b(?:you\s+must\s+now|from\s+now\s+on\s+you\s+(?:must|will)|you\s+are\s+now)\s+(?:act\s+as|roleplay\s+as|operate\s+as|become|in\s+developer\s+mode|unrestricted|jailbroken)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+    [GeneratedRegex(@"\b(?:you\s+must\s+now|from\s+now\s+on\s+you\s+(?:must|will)|you\s+are\s+now)\s+(?:act\s+as|roleplay\s+as|operate\s+as|become|in\s+developer\s+mode|unrestricted|jailbroken)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex PersonaHijackRegex();
 
-        new("DAN Jailbreak", new Regex(
-            @"\bact\s+as\s+(?:DAN|an\s+unrestricted|a\s+jailbroken|developer\s+mode)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+    [GeneratedRegex(@"\bact\s+as\s+(?:DAN|an\s+unrestricted|a\s+jailbroken|developer\s+mode)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex DanJailbreakRegex();
 
-        // 2. Delimiters and LLM control tokens
-        new("ChatML Control Token", new Regex(
-            @"<\|(?:im_start|im_end|endoftext|fim_prefix|fim_suffix)\|>",
-            RegexOptions.Compiled)),
+    [GeneratedRegex(@"<\|(?:im_start|im_end|endoftext|fim_prefix|fim_suffix)\|>")]
+    private static partial Regex ChatMlControlTokenRegex();
 
-        new("Llama Instruction Delimiter", new Regex(
-            @"(?:\[INST\]|\[/INST\]|<<SYS>>|<</SYS>>)",
-            RegexOptions.Compiled)),
+    [GeneratedRegex(@"(?:\[INST\]|\[/INST\]|<<SYS>>|<</SYS>>)")]
+    private static partial Regex LlamaInstructionDelimiterRegex();
 
-        new("Turn Delimiter Injection", new Regex(
-            @"(?:<turn_start>\s*(?:system|user|model)|<turn_end>)",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+    [GeneratedRegex(@"(?:<turn_start>\s*(?:system|user|model)|<turn_end>)", RegexOptions.IgnoreCase)]
+    private static partial Regex TurnDelimiterInjectionRegex();
 
-        new("Role Turn Injection", new Regex(
-            @"(?:^|\n)\s*(?:System|Human|Assistant)\s*:\s*(?:ignore\s+all|disregard|you\s+are\s+now|override|new\s+instructions?)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+    [GeneratedRegex(@"(?:^|\n)\s*(?:System|Human|Assistant)\s*:\s*(?:ignore\s+all|disregard|you\s+are\s+now|override|new\s+instructions?)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RoleTurnInjectionRegex();
 
-        // 3. Credential and prompt exfiltration
-        new("Secret Exfiltration Directive", new Regex(
-            @"\b(?:print|reveal|output|display|show|leak|echo|send|exfiltrate)\s+(?:your\s+)?(?:system\s+(?:prompt|instructions?)|initial\s+(?:prompt|instructions?)|secret\s+key|api\s+key|passwords?|credentials?|environment\s+variables?)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+    [GeneratedRegex(@"\b(?:print|reveal|output|display|show|leak|echo|send|exfiltrate)\s+(?:your\s+)?(?:system\s+(?:prompt|instructions?)|initial\s+(?:prompt|instructions?)|secret\s+key|api\s+key|passwords?|credentials?|environment\s+variables?)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex SecretExfiltrationDirectiveRegex();
 
-        // 4. Adversarial agent instructions
-        new("Targeted Agent Directive", new Regex(
-            @"\b(?:IMPORTANT|CRITICAL|NOTE\s+TO|ATTENTION)\s*(?::\s*)?(?:AI|LLM|AGENT|ASSISTANT|CHATGPT|CLAUDE|GEMINI)\s*[:,]\s*(?:ignore|disregard|do not|you must|override|forget)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled)),
+    [GeneratedRegex(@"\b(?:IMPORTANT|CRITICAL|NOTE\s+TO|ATTENTION)\s*(?::\s*)?(?:AI|LLM|AGENT|ASSISTANT|CHATGPT|CLAUDE|GEMINI)\s*[:,]\s*(?:ignore|disregard|do not|you must|override|forget)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex TargetedAgentDirectiveRegex();
 
-        new("Hidden Comment Injection", new Regex(
-            @"<!--\s*(?:AI|LLM|AGENT|ASSISTANT)\s*(?:INSTRUCTION|PROMPT)\s*:",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled))
-    };
+    [GeneratedRegex(@"<!--\s*(?:AI|LLM|AGENT|ASSISTANT)\s*(?:INSTRUCTION|PROMPT)\s*:", RegexOptions.IgnoreCase)]
+    private static partial Regex HiddenCommentInjectionRegex();
+
+    private static readonly InjectionRule[] Rules =
+    [
+        new("Directive Override", DirectiveOverrideRegex()),
+        new("Disregard Context", DisregardContextRegex()),
+        new("System Override Directive", SystemOverrideDirectiveRegex()),
+        new("Persona Hijack / Developer Mode", PersonaHijackRegex()),
+        new("DAN Jailbreak", DanJailbreakRegex()),
+        new("ChatML Control Token", ChatMlControlTokenRegex()),
+        new("Llama Instruction Delimiter", LlamaInstructionDelimiterRegex()),
+        new("Turn Delimiter Injection", TurnDelimiterInjectionRegex()),
+        new("Role Turn Injection", RoleTurnInjectionRegex()),
+        new("Secret Exfiltration Directive", SecretExfiltrationDirectiveRegex()),
+        new("Targeted Agent Directive", TargetedAgentDirectiveRegex()),
+        new("Hidden Comment Injection", HiddenCommentInjectionRegex())
+    ];
 
     public PromptInjectionResult Detect(string content)
     {
