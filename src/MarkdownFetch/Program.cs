@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using MarkdownFetch.Core.Ports;
+using MarkdownFetch.Core.Services;
 using MarkdownFetch.Core.UseCases;
 using MarkdownFetch.Infrastructure.Converters;
 using MarkdownFetch.Infrastructure.Http;
@@ -16,8 +17,17 @@ var rootCommand = CommandLineConfiguration.CreateRootCommand(() =>
     IMarkitdownClient markitdownClient = new MarkitdownApiClient(httpClient);
     IOutputWriter outputWriter = new OutputWriter();
     IConsoleView consoleView = new ConsoleView();
+    IUrlWhitelistValidator urlWhitelistValidator = new UrlWhitelistValidator();
+    IPromptInjectionDetector promptInjectionDetector = new PromptInjectionDetector();
 
-    return new FetchMarkdownUseCase(downloader, nativeConverter, markitdownClient, outputWriter, consoleView);
+    return new FetchMarkdownUseCase(
+        downloader,
+        nativeConverter,
+        markitdownClient,
+        outputWriter,
+        consoleView,
+        urlWhitelistValidator,
+        promptInjectionDetector);
 });
 
 return await rootCommand.Parse(args).InvokeAsync();

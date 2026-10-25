@@ -11,5 +11,7 @@ public sealed class ConsoleView : IConsoleView
 
     public void WriteSuccess(string message) => Console.WriteLine($"[SUCCESS] {message}");
 
+    public void WriteWarning(string message) => Console.Error.WriteLine($"[WARNING] {message}");
+
     public void WriteError(string message) => Console.Error.WriteLine($"[ERROR] {message}");
 }

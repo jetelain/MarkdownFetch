@@ -127,8 +127,52 @@ mdfetch https://example.com -t 60
 | `--use-api` | | Use external markitdown-api instead of native .NET (shortcut for `--engine api`). | `false` |
 | `--api-url <url>` | `-a` | The markitdown API server URL (automatically selects API engine). | `MARKITDOWN_API_URL` env var or `http://127.0.0.1:8490` |
 | `--timeout <sec>` | `-t` | Network and processing timeout in seconds. | `30` |
+| `--filter-hidden-text` | | Filter hidden text and elements in HTML (e.g. `display:none`, `visibility:hidden`, `[hidden]`, zero-width spaces). | `true` |
+| `--no-filter-hidden-text` | | Disable filtering of hidden HTML elements. | |
+| `--detect-prompt-injection` | | Detect adversarial prompt injection patterns in fetched content. | `true` |
+| `--no-detect-prompt-injection` | | Disable prompt injection detection. | |
+| `--url-whitelist <pattern...>` | | Permitted URL patterns or domains (e.g. `github.com`, `*.github.com`). If not specified, all URLs are allowed unless restricted by safety policy. | none |
+| `--safety-config <path>` | | Path to a safety configuration JSON file. | |
 | `--help` | `-h`, `-?` | Show help and usage information. | |
 | `--version` | | Show version information. | |
+
+---
+
+## Safety Guards & Containered Agent Hardening
+
+`mdfetch` is designed for autonomous AI agents and includes built-in safety guards to protect LLMs against adversarial inputs:
+
+1. **Hidden Text Filtering**: Filters invisible text from HTML (elements with `display:none`, `visibility:hidden`, `opacity:0`, `font-size:0`, `[hidden]`, `[aria-hidden="true"]`, off-screen styling, and zero-width unicode characters). Enabled by default.
+2. **Prompt Injection Detection**: Scans downloaded content across all formats (HTML, PDF, DOCX, text) for jailbreaks, instruction overrides, system token injections (`<|im_start|>`, `[INST]`), exfiltration directives, and agent targeting attacks. Enabled by default.
+3. **URL Whitelisting**: Restricts downloads (and redirect targets) to specific allowed domains, wildcards (`*.github.com`), or URL prefixes.
+
+### Tamper-Proof Container Configuration
+
+For sandboxed or containered agent environments (e.g. Docker, Kubernetes), administrators can mount a read-only configuration file that the agent cannot tamper with:
+
+* **Linux / Containers**: `/etc/markdownfetch/safety.json` or `/etc/mdfetch/safety.json` (mount as read-only `:ro`)
+* **Environment Variable**: `MDFETCH_SAFETY_CONFIG=/path/to/protected/safety.json`
+* **Windows**: `%ProgramData%\MarkdownFetch\safety.json`
+
+Example `safety.json`:
+
+```json
+{
+  "urlWhitelist": [
+    "*.github.com",
+    "github.com",
+    "raw.githubusercontent.com",
+    "learn.microsoft.com"
+  ],
+  "filterHiddenText": true,
+  "forceFilterHiddenText": true,
+  "detectPromptInjection": true,
+  "forceDetectPromptInjection": true,
+  "promptInjectionAction": "Block"
+}
+```
+
+When `forceFilterHiddenText` or `forceDetectPromptInjection` is set to `true`, containered agents **cannot** disable safety guards via CLI flags (`--no-filter-hidden-text`, `--no-detect-prompt-injection`). Likewise, the URL whitelist is strictly enforced against both initial requests and redirect hops.
 
 ---
 
@@ -137,6 +181,10 @@ mdfetch https://example.com -t 60
 - `MARKITDOWN_API_URL`: Overrides the default API address without passing `--api-url` every time:
   ```bash
   export MARKITDOWN_API_URL="http://localhost:8490"
+  ```
+- `MDFETCH_SAFETY_CONFIG`: Specifies the location of the protected safety configuration file:
+  ```bash
+  export MDFETCH_SAFETY_CONFIG="/etc/mdfetch/safety.json"
   ```
 
 ---

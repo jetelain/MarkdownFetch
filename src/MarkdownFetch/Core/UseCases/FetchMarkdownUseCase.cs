@@ -1,12 +1,14 @@
 using MarkdownFetch.Core.Models;
 using MarkdownFetch.Core.Ports;
 using MarkdownFetch.Core.Services;
+using Pmad.Markitdown.Filters;
 
 namespace MarkdownFetch.Core.UseCases;
 
 /// <summary>
 /// Application use case coordinating the process of fetching a remote resource,
-/// sending it to markitdown-api for conversion, and writing the resulting markdown.
+/// validating safety policies (URL whitelist, prompt injection, hidden text filtering),
+/// converting to markdown, and writing the resulting output.
 /// </summary>
 public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
 {
@@ -15,19 +17,25 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
     private readonly IMarkitdownClient _markitdownClient;
     private readonly IOutputWriter _outputWriter;
     private readonly IConsoleView _consoleView;
+    private readonly IUrlWhitelistValidator _urlWhitelistValidator;
+    private readonly IPromptInjectionDetector _promptInjectionDetector;
 
     public FetchMarkdownUseCase(
         IResourceDownloader downloader,
         INativeMarkdownConverter nativeConverter,
         IMarkitdownClient markitdownClient,
         IOutputWriter outputWriter,
-        IConsoleView consoleView)
+        IConsoleView consoleView,
+        IUrlWhitelistValidator? urlWhitelistValidator = null,
+        IPromptInjectionDetector? promptInjectionDetector = null)
     {
         _downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
         _nativeConverter = nativeConverter ?? throw new ArgumentNullException(nameof(nativeConverter));
         _markitdownClient = markitdownClient ?? throw new ArgumentNullException(nameof(markitdownClient));
         _outputWriter = outputWriter ?? throw new ArgumentNullException(nameof(outputWriter));
         _consoleView = consoleView ?? throw new ArgumentNullException(nameof(consoleView));
+        _urlWhitelistValidator = urlWhitelistValidator ?? new UrlWhitelistValidator();
+        _promptInjectionDetector = promptInjectionDetector ?? new PromptInjectionDetector();
     }
 
     public FetchMarkdownUseCase(
@@ -43,11 +51,27 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
     {
         public Task<ConversionResult> ConvertAsync(DownloadedResource resource, CancellationToken cancellationToken = default) =>
             Task.FromResult(ConversionResult.Failure("Native converter not configured.", 500));
+
+        public Task<ConversionResult> ConvertAsync(DownloadedResource resource, NativeConversionOptions? options, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ConversionResult.Failure("Native converter not configured.", 500));
     }
 
     public async Task<int> ExecuteAsync(MarkdownFetchOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
+
+        // 1. Safety Guard: Validate initial URL against whitelist policies
+        if (!_urlWhitelistValidator.IsAllowed(options.Url, options.SystemUrlWhitelist))
+        {
+            _consoleView.WriteError($"URL '{options.Url}' is not permitted by system safety whitelist policy.");
+            return 1;
+        }
+
+        if (!_urlWhitelistValidator.IsAllowed(options.Url, options.UrlWhitelist))
+        {
+            _consoleView.WriteError($"URL '{options.Url}' is not permitted by URL whitelist policy.");
+            return 1;
+        }
 
         var apiUrl = (options.ApiUrl ?? string.Empty).TrimEnd('/');
 
@@ -87,16 +111,48 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
 
         await using (resource)
         {
+            // 2. Safety Guard: Validate redirected URL against whitelist policies
+            if (resource.Url != null)
+            {
+                if (!_urlWhitelistValidator.IsAllowed(resource.Url, options.SystemUrlWhitelist))
+                {
+                    _consoleView.WriteError($"Redirected URL '{resource.Url}' is not permitted by system safety whitelist policy.");
+                    return 1;
+                }
+
+                if (!_urlWhitelistValidator.IsAllowed(resource.Url, options.UrlWhitelist))
+                {
+                    _consoleView.WriteError($"Redirected URL '{resource.Url}' is not permitted by URL whitelist policy.");
+                    return 1;
+                }
+            }
+
             ConversionResult conversionResult;
             try
             {
                 if (options.Engine == ConversionEngine.Api)
                 {
-                    conversionResult = await _markitdownClient.ConvertAsync(apiUrl, resource, options.Timeout, cancellationToken);
+                    if (options.FilterHiddenText && IsHtml(resource))
+                    {
+                        var filteredStream = await HtmlHiddenTextFilter.FilterHtmlStreamAsync(resource.Content, cancellationToken: cancellationToken);
+                        var filteredResource = new DownloadedResource(filteredStream, resource.FileName, resource.ContentType, resource.Url);
+                        await using (filteredResource)
+                        {
+                            conversionResult = await _markitdownClient.ConvertAsync(apiUrl, filteredResource, options.Timeout, cancellationToken);
+                        }
+                    }
+                    else
+                    {
+                        conversionResult = await _markitdownClient.ConvertAsync(apiUrl, resource, options.Timeout, cancellationToken);
+                    }
                 }
                 else
                 {
-                    conversionResult = await _nativeConverter.ConvertAsync(resource, cancellationToken);
+                    var nativeOptions = new NativeConversionOptions
+                    {
+                        FilterHiddenText = options.FilterHiddenText
+                    };
+                    conversionResult = await _nativeConverter.ConvertAsync(resource, nativeOptions, cancellationToken);
                 }
             }
             catch (Exception ex)
@@ -127,6 +183,29 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
                 markdown = MarkdownLinkResolver.ResolveRelativeLinks(markdown, effectiveUrl);
             }
 
+            // 3. Safety Guard: Prompt Injection Detection
+            if (options.DetectPromptInjection)
+            {
+                var injectionResult = _promptInjectionDetector.Detect(markdown);
+                if (injectionResult.IsDetected)
+                {
+                    if (options.PromptInjectionAction == PromptInjectionAction.Block)
+                    {
+                        _consoleView.WriteError($"Prompt injection detected in converted content: {injectionResult.MatchedPattern}. Fetch aborted for security.");
+                        return 1;
+                    }
+                    else if (options.PromptInjectionAction == PromptInjectionAction.Warn)
+                    {
+                        _consoleView.WriteWarning($"Prompt injection detected: {injectionResult.MatchedPattern}.");
+                    }
+                    else if (options.PromptInjectionAction == PromptInjectionAction.Sanitize)
+                    {
+                        _consoleView.WriteWarning($"Prompt injection sanitized: {injectionResult.MatchedPattern}.");
+                        markdown = injectionResult.SanitizedContent ?? markdown;
+                    }
+                }
+            }
+
             try
             {
                 await _outputWriter.WriteAsync(markdown, options.OutputPath, cancellationToken);
@@ -144,6 +223,18 @@ public sealed class FetchMarkdownUseCase : IFetchMarkdownUseCase
         }
 
         return 0;
+    }
+
+    private static bool IsHtml(DownloadedResource resource)
+    {
+        if (!string.IsNullOrWhiteSpace(resource.ContentType))
+        {
+            var mime = resource.ContentType.Split(';')[0].Trim().ToLowerInvariant();
+            if (mime is "text/html" or "application/xhtml+xml") return true;
+        }
+
+        var ext = Path.GetExtension(resource.FileName)?.ToLowerInvariant();
+        return ext is ".html" or ".htm" or ".xhtml";
     }
 
     private static int ResolvePort(string apiUrl)

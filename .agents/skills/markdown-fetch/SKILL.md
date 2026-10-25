@@ -108,7 +108,23 @@ export MARKITDOWN_API_URL="http://127.0.0.1:8490"
 | `--use-api` | | Use markitdown-api instead of native .NET (shortcut for `--engine api`). | `false` |
 | `--api-url <url>` | `-a` | URL of the markitdown API server (automatically selects API engine). | `http://127.0.0.1:8490` |
 | `--timeout <sec>` | `-t` | Network and conversion timeout in seconds. | `30` |
+| `--filter-hidden-text` | | Filter hidden text and invisible elements from HTML content. | `true` |
+| `--no-filter-hidden-text` | | Disable filtering of hidden HTML elements. | |
+| `--detect-prompt-injection` | | Detect adversarial prompt injection in fetched content. | `true` |
+| `--no-detect-prompt-injection` | | Disable prompt injection detection. | |
+| `--url-whitelist <pattern...>` | | Permitted URL pattern(s) or domain(s). | none |
+| `--safety-config <path>` | | Path to safety configuration JSON file. | |
 | `--help` | `-h`, `-?` | Display usage and help message. | |
+
+---
+
+## Safety Guards for AI Agents
+
+`mdfetch` has safety guards built-in to protect AI agents from untrusted web pages and malicious documents:
+- **Hidden Text Filtering** (on by default): Strips invisible text/elements (`display:none`, `visibility:hidden`, `[hidden]`, `[aria-hidden="true"]`, offscreen text, zero-width spaces).
+- **Prompt Injection Detection** (on by default): Rejects content attempting jailbreaks, system instruction overrides, or token injections.
+- **URL Whitelisting** (none by default): Restricts requests to whitelisted hosts/patterns.
+- **Protected Configuration**: In container environments, a read-only configuration at `/etc/mdfetch/safety.json` or `MDFETCH_SAFETY_CONFIG` can enforce safety guards and whitelist policies that agents cannot disable or tamper with.
 
 ---
 
@@ -118,6 +134,8 @@ export MARKITDOWN_API_URL="http://127.0.0.1:8490"
 |---|---|---|
 | `0` | Success | Proceed with the extracted markdown content. |
 | `1` | API not reachable | If running with `--use-api`, start Docker: `docker run -d --name markitdown-api -p 8490:8490 ghcr.io/dezoito/markitdown-api:latest` or omit `--use-api` for native conversion. |
+| `1` | URL whitelist violation | The URL (or redirect target) is not permitted by whitelist policy. Contact system administrator. |
+| `1` | Prompt injection detected | Malicious prompt injection was detected in the fetched document. Fetch was aborted for security. |
 | `1` | Download error (404/403/timeout) | Verify the remote URL is valid and accessible over the network. |
 | `1` | File type not supported (422) | Try with `--use-api`, or fallback to raw download or curl. |
 | `1` | Invalid CLI arguments | Ensure the URL includes the scheme (e.g. `https://...`). |

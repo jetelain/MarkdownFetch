@@ -17,7 +17,10 @@ public sealed class NativeMarkdownConverter : INativeMarkdownConverter
         _markitdown = markitdown ?? new Pmad.Markitdown.Markitdown();
     }
 
-    public async Task<ConversionResult> ConvertAsync(DownloadedResource resource, CancellationToken cancellationToken = default)
+    public Task<ConversionResult> ConvertAsync(DownloadedResource resource, CancellationToken cancellationToken = default) =>
+        ConvertAsync(resource, options: null, cancellationToken);
+
+    public async Task<ConversionResult> ConvertAsync(DownloadedResource resource, NativeConversionOptions? options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(resource);
 
@@ -29,11 +32,12 @@ public sealed class NativeMarkdownConverter : INativeMarkdownConverter
 
         try
         {
-            var options = new MarkitdownOptions
+            var markitdownOptions = new MarkitdownOptions
             {
-                BaseUrl = resource.Url
+                BaseUrl = resource.Url,
+                FilterHiddenText = options?.FilterHiddenText ?? true
             };
-            var markdown = await _markitdown.ConvertAsync(resource.Content, extension, options, cancellationToken: cancellationToken);
+            var markdown = await _markitdown.ConvertAsync(resource.Content, extension, markitdownOptions, cancellationToken: cancellationToken);
             return ConversionResult.Success(markdown);
         }
         catch (NotSupportedException)
