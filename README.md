@@ -14,7 +14,7 @@ Built with **.NET 10**, **Clean Architecture**, **System.CommandLine 2.0**, and 
    * **Zero external dependencies**: No Docker or external service required.
    * Powered in-process by **`Pmad.Markitdown`**, a lightweight, high-performance .NET library dedicated to converting:
      * **HTML**: Robust DOM parsing and sanitization via `AngleSharp` and semantic Markdown conversion with `ReverseMarkdown`.
-     * **PDF**: Clean text and structure extraction via `PdfSharpCore`, including support for subsetted fonts, font CMaps, and Unicode mappings.
+     * **PDF**: Clean text and structure extraction via `PdfPig`, including support for subsetted fonts, font CMaps, and Unicode mappings.
      * **DOCX**: Semantic Word document conversion via `Mammoth`.
      * **Text / Markdown / JSON**: Automatic normalization of line endings and encoding.
    * Fast, private, and runs directly within the CLI process.
@@ -148,7 +148,7 @@ The project follows **Clean Architecture** principles to decouple business logic
 ```
 src/
 ├── Pmad.Markitdown/                        # Core Managed Markdown Conversion Library
-│   ├── Converters/                         # Format Converters (Html, Pdf [PdfSharpCore], Docx [Mammoth], PlainText)
+│   ├── Converters/                         # Format Converters (Html, Pdf [PdfPig], Docx [Mammoth], PlainText)
 │   ├── IMarkitdown.cs                      # Conversion contracts & options
 │   └── Markitdown.cs                       # Converter implementation & pipeline
 │

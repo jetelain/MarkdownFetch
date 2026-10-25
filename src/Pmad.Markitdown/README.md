@@ -15,8 +15,8 @@ Targeting **.NET 10** and **.NET 8**.
   - Automatically extracts `<title>` as a top-level `# ` heading if not already present.
   - Strips noisy boilerplate elements (`<script>`, `<style>`, `<nav>`, `<svg>`, `<footer>`).
 - **PDF to Markdown**:
-  - Extracted via [PdfSharpCore](https://github.com/ststeiger/PdfSharpCore).
-  - Low-level content stream parser handling font CMaps, subsetted fonts (`/ToUnicode`), and accurate character/line positioning.
+  - Extracted via [PdfPig](https://github.com/UglyToad/PdfPig) (Apache-2.0).
+  - Robust text and structure extraction handling font CMaps, subsetted fonts, and reading order layout analysis.
 - **Word (DOCX) to Markdown**:
   - Semantic document extraction via [Mammoth](https://github.com/mwilliamson/mammoth-dotnet) piped into clean Markdown.
 - **Plain Text / Code / JSON**:
@@ -186,7 +186,7 @@ var markitdown = new Markitdown(converters);
 | Format | Extensions | MIME Types | Engine |
 |---|---|---|---|
 | **HTML** | `.html`, `.htm`, `.xhtml` | `text/html`, `application/xhtml+xml` | AngleSharp + ReverseMarkdown |
-| **PDF** | `.pdf` | `application/pdf` | PdfSharpCore |
+| **PDF** | `.pdf` | `application/pdf` | PdfPig |
 | **Word** | `.docx` | `application/vnd.openxmlformats-officedocument.wordprocessingml.document` | Mammoth |
 | **Plain Text** | `.txt`, `.text` | `text/plain` | Managed |
 | **Markdown** | `.md`, `.markdown` | `text/markdown` | Managed |

@@ -1,6 +1,7 @@
-using System.Text;
-using PdfSharpCore.Drawing;
-using PdfSharpCore.Pdf;
+using UglyToad.PdfPig.Content;
+using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.Fonts.Standard14Fonts;
+using UglyToad.PdfPig.Writer;
 using Pmad.Markitdown;
 
 namespace Pmad.Markitdown.Tests;
@@ -61,23 +62,17 @@ public class MarkitdownTests
     [Fact]
     public async Task ConvertAsync_PdfDocument_ExtractsTextCorrectly()
     {
-        using var pdfDoc = new PdfDocument();
-        var page = pdfDoc.AddPage();
-        using (var gfx = XGraphics.FromPdfPage(page))
-        {
-            var options = new XPdfFontOptions(PdfFontEncoding.WinAnsi);
-            var font = new XFont("Helvetica", 14, XFontStyle.Regular, options);
-            gfx.DrawString("Sample PDF text generated with PdfSharpCore.", font, XBrushes.Black, new XPoint(50, 100));
-        }
+        var builder = new PdfDocumentBuilder();
+        var font = builder.AddStandard14Font(Standard14Font.Helvetica);
+        var page = builder.AddPage(PageSize.A4);
+        page.AddText("Sample PDF text generated with PdfPig.", 12, new PdfPoint(50, 700), font);
+        var pdfBytes = builder.Build();
 
-        using var pdfStream = new MemoryStream();
-        pdfDoc.Save(pdfStream, closeStream: false);
-        pdfStream.Position = 0;
-
+        using var pdfStream = new MemoryStream(pdfBytes);
         var markdown = await _markitdown.ConvertAsync(pdfStream, ".pdf");
 
         Assert.NotNull(markdown);
-        Assert.Contains("Sample PDF text generated with PdfSharpCore.", markdown);
+        Assert.Contains("Sample PDF text generated with PdfPig.", markdown);
     }
 
     [Fact]

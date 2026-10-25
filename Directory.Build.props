@@ -1,9 +1,4 @@
 <Project>
     <!-- Import local developer settings if present (untracked by git) -->
     <Import Project="Directory.Build.props.user" Condition="Exists('Directory.Build.props.user')" />
-
-    <!-- Map environment variable if defined in CI / GitHub Actions -->
-    <PropertyGroup Condition="'$(SixLaborsLicenseKey)' == '' and '$(SIXLABORS_LICENSE_KEY)' != ''">
-        <SixLaborsLicenseKey>$(SIXLABORS_LICENSE_KEY)</SixLaborsLicenseKey>
-    </PropertyGroup>
 </Project>
