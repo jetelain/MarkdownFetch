@@ -8,4 +8,7 @@ namespace MarkdownFetch.Core.Ports;
 public interface IResourceDownloader
 {
     Task<DownloadedResource> DownloadAsync(Uri url, TimeSpan timeout, CancellationToken cancellationToken = default);
+
+    Task<DownloadedResource> DownloadAsync(Uri url, TimeSpan timeout, IReadOnlyList<string>? urlWhitelist, CancellationToken cancellationToken = default) =>
+        DownloadAsync(url, timeout, cancellationToken);
 }

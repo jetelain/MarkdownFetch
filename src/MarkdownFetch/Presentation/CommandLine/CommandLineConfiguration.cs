@@ -1,16 +1,24 @@
 using System.CommandLine;
 using MarkdownFetch.Core.Models;
+using MarkdownFetch.Core.Ports;
 using MarkdownFetch.Core.UseCases;
 using MarkdownFetch.Infrastructure.Http;
+using MarkdownFetch.Infrastructure.Safety;
 
 namespace MarkdownFetch.Presentation.CommandLine;
 
 /// <summary>
-/// Configures System.CommandLine 2.0.13 commands, arguments, and options for the CLI.
+/// Configures System.CommandLine 2.0.13 commands, arguments, and options for the CLI,
+/// including safety guards and policy enforcement.
 /// </summary>
 public static class CommandLineConfiguration
 {
-    public static RootCommand CreateRootCommand(Func<IFetchMarkdownUseCase> useCaseFactory)
+    public static RootCommand CreateRootCommand(Func<IFetchMarkdownUseCase> useCaseFactory) =>
+        CreateRootCommand(useCaseFactory, null);
+
+    public static RootCommand CreateRootCommand(
+        Func<IFetchMarkdownUseCase> useCaseFactory,
+        ISafetyConfigurationLoader? safetyLoader)
     {
         ArgumentNullException.ThrowIfNull(useCaseFactory);
 
@@ -63,6 +71,33 @@ public static class CommandLineConfiguration
             DefaultValueFactory = _ => 30
         };
 
+        // Safety Guard Options
+        var filterHiddenTextOption = new Option<bool?>(
+            "--filter-hidden-text")
+        {
+            Description = "Filter hidden text and invisible elements from HTML content (default: true).",
+            Arity = ArgumentArity.ZeroOrOne
+        };
+
+        var noFilterHiddenTextOption = new Option<bool>(
+            "--no-filter-hidden-text")
+        {
+            Description = "Disable filtering of hidden text and elements in HTML."
+        };
+
+        var detectPromptInjectionOption = new Option<bool?>(
+            "--detect-prompt-injection")
+        {
+            Description = "Detect prompt injection attacks in fetched content (default: true).",
+            Arity = ArgumentArity.ZeroOrOne
+        };
+
+        var noDetectPromptInjectionOption = new Option<bool>(
+            "--no-detect-prompt-injection")
+        {
+            Description = "Disable prompt injection detection in fetched content."
+        };
+
         var rootCommand = new RootCommand("Small CLI to download any web resource as a markdown (with native .NET or markitdown-api).")
         {
             urlArgument,
@@ -71,7 +106,11 @@ public static class CommandLineConfiguration
             engineOption,
             useApiOption,
             apiUrlOption,
-            timeoutOption
+            timeoutOption,
+            filterHiddenTextOption,
+            noFilterHiddenTextOption,
+            detectPromptInjectionOption,
+            noDetectPromptInjectionOption
         };
 
         rootCommand.SetAction(async (parseResult, cancellationToken) =>
@@ -109,13 +148,88 @@ public static class CommandLineConfiguration
                 timeoutSeconds = 30;
             }
 
+            // Load safety configuration from system/container paths or environment variable
+            var loader = safetyLoader ?? SafetyConfigurationLoader.Instance;
+            SafetyPolicy safetyPolicy;
+            try
+            {
+                safetyPolicy = loader.LoadPolicy();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ERROR] Failed to load safety configuration: {ex.Message}");
+                return 1;
+            }
+
+            // Resolve FilterHiddenText (on by default; cannot be disabled if forced by safety config)
+            bool filterHiddenText;
+            var noFilterFlag = parseResult.GetValue(noFilterHiddenTextOption);
+            var filterValue = parseResult.GetValue(filterHiddenTextOption);
+
+            if (safetyPolicy.ForceFilterHiddenText)
+            {
+                if (noFilterFlag || (filterValue.HasValue && !filterValue.Value))
+                {
+                    Console.Error.WriteLine("[WARNING] Hidden text filtering is enforced by safety configuration and cannot be disabled.");
+                }
+                filterHiddenText = true;
+            }
+            else
+            {
+                if (noFilterFlag)
+                {
+                    filterHiddenText = false;
+                }
+                else if (filterValue.HasValue)
+                {
+                    filterHiddenText = filterValue.Value;
+                }
+                else
+                {
+                    filterHiddenText = safetyPolicy.FilterHiddenText;
+                }
+            }
+
+            // Resolve DetectPromptInjection (on by default; cannot be disabled if forced by safety config)
+            bool detectPromptInjection;
+            var noDetectFlag = parseResult.GetValue(noDetectPromptInjectionOption);
+            var detectValue = parseResult.GetValue(detectPromptInjectionOption);
+
+            if (safetyPolicy.ForceDetectPromptInjection)
+            {
+                if (noDetectFlag || (detectValue.HasValue && !detectValue.Value))
+                {
+                    Console.Error.WriteLine("[WARNING] Prompt injection detection is enforced by safety configuration and cannot be disabled.");
+                }
+                detectPromptInjection = true;
+            }
+            else
+            {
+                if (noDetectFlag)
+                {
+                    detectPromptInjection = false;
+                }
+                else if (detectValue.HasValue)
+                {
+                    detectPromptInjection = detectValue.Value;
+                }
+                else
+                {
+                    detectPromptInjection = safetyPolicy.DetectPromptInjection;
+                }
+            }
+
             var options = new MarkdownFetchOptions
             {
                 Url = uri,
                 OutputPath = outputPath,
                 Engine = engine,
                 ApiUrl = apiUrl,
-                Timeout = TimeSpan.FromSeconds(timeoutSeconds)
+                Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+                FilterHiddenText = filterHiddenText,
+                DetectPromptInjection = detectPromptInjection,
+                UrlWhitelist = safetyPolicy.UrlWhitelist,
+                PromptInjectionAction = safetyPolicy.PromptInjectionAction
             };
 
             var useCase = useCaseFactory();

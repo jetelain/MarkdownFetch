@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AngleSharp.Html.Dom;
 using AngleSharp.Html.Parser;
+using Pmad.Markitdown.Filters;
 using ReverseMarkdown;
 
 namespace Pmad.Markitdown.Converters;
@@ -61,7 +62,7 @@ public sealed class HtmlToMarkdownConverter : IFormatConverter
 
         string? title = null;
 
-        if (options.CleanHtml || options.BaseUrl != null)
+        if (options.CleanHtml || options.BaseUrl != null || options.FilterHiddenText)
         {
             try
             {
@@ -86,6 +87,11 @@ public sealed class HtmlToMarkdownConverter : IFormatConverter
                     }
                 }
 
+                if (options.FilterHiddenText)
+                {
+                    HtmlHiddenTextFilter.RemoveHiddenElements(document);
+                }
+
                 ResolveRelativeUrls(document, options.BaseUrl);
 
                 if (document.Body != null)
@@ -100,7 +106,7 @@ public sealed class HtmlToMarkdownConverter : IFormatConverter
         }
 
         var markdown = _converter.Convert(htmlToConvert);
-        var cleaned = CleanMarkdown(markdown);
+        var cleaned = CleanMarkdown(markdown, options.FilterHiddenText);
 
         if (!string.IsNullOrWhiteSpace(title) && !cleaned.StartsWith("# "))
         {
@@ -204,9 +210,14 @@ public sealed class HtmlToMarkdownConverter : IFormatConverter
         return true;
     }
 
-    private static string CleanMarkdown(string markdown)
+    private static string CleanMarkdown(string markdown, bool filterHiddenText = false)
     {
         if (string.IsNullOrEmpty(markdown)) return string.Empty;
+
+        if (filterHiddenText)
+        {
+            markdown = HtmlHiddenTextFilter.StripInvisibleCharacters(markdown);
+        }
 
         markdown = markdown.Replace("\r\n", "\n").Replace('\r', '\n');
 

@@ -16,6 +16,11 @@ public sealed class MarkitdownOptions
     public bool CleanHtml { get; set; } = true;
 
     /// <summary>
+    /// If true, filters hidden elements and hidden text from HTML documents (on by default).
+    /// </summary>
+    public bool FilterHiddenText { get; set; } = true;
+
+    /// <summary>
     /// Optional base URL used to resolve relative links and images into absolute URLs.
     /// </summary>
     public Uri? BaseUrl { get; set; }

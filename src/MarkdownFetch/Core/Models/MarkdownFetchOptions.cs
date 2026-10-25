@@ -16,4 +16,24 @@ public sealed record MarkdownFetchOptions
     public ConversionEngine Engine { get; init; } = ConversionEngine.Native;
     public string ApiUrl { get; init; } = "http://127.0.0.1:8490";
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// If true, filters hidden elements and invisible characters from HTML content (on by default).
+    /// </summary>
+    public bool FilterHiddenText { get; init; } = true;
+
+    /// <summary>
+    /// If true, checks converted markdown for prompt injection patterns (on by default).
+    /// </summary>
+    public bool DetectPromptInjection { get; init; } = true;
+
+    /// <summary>
+    /// Allowed URL patterns / domains configured by safety policy. If empty, all URLs are permitted.
+    /// </summary>
+    public IReadOnlyList<string> UrlWhitelist { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Action to take when prompt injection is detected (default: Block).
+    /// </summary>
+    public PromptInjectionAction PromptInjectionAction { get; init; } = PromptInjectionAction.Block;
 }

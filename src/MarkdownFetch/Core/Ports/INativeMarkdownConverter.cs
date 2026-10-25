@@ -8,4 +8,5 @@ namespace MarkdownFetch.Core.Ports;
 public interface INativeMarkdownConverter
 {
     Task<ConversionResult> ConvertAsync(DownloadedResource resource, CancellationToken cancellationToken = default);
+    Task<ConversionResult> ConvertAsync(DownloadedResource resource, NativeConversionOptions? options, CancellationToken cancellationToken = default);
 }
